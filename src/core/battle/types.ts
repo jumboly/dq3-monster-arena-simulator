@@ -67,6 +67,14 @@ export interface CombatantState {
   rotationCounter: number
   /** 同一モンスター識別子（A/B/C 表記用） */
   duplicateIndex: number
+
+  /**
+   * 高守備力フラグ（$2052 bit3）。スクルトで守備力が 1023 にクリップされたとき立つ
+   * （battle-spec §7.5, RGH-022 $0299F5）。追加フィールドなので省略可（未設定 = false）。
+   */
+  highDefense?: boolean
+  /** 呪文失敗フラグ（$2052 bit#$04, battle-spec §4.5）。参照箇所は無いが Internal 表示用に保持 */
+  spellFailed?: boolean
 }
 
 /**
@@ -133,6 +141,11 @@ export interface BattleResult {
   finalStates: CombatantState[]
   /** 戦闘中に実装上の近似・未解明分岐を通った回数（再現度の可視化用） */
   fidelityHits: Record<string, number>
+  /**
+   * 乱数プリミティブ（RomRandom）の通算呼び出し回数。将来 SfcDq3Rng に差し替えたとき
+   * 消費回数の一致を確かめるため。追加フィールドなので省略可。
+   */
+  rngCalls?: number
 }
 
 export interface BattleEngine {

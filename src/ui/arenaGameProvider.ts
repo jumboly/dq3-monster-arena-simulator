@@ -1,15 +1,16 @@
 /**
  * UI が使う ArenaGame の唯一の生成箇所。
  *
- * 本実装が揃ったら、createInstance() の中身を createDQ3ArenaGame({ engine, drawPolicy }) に
- * 差し替えるだけで画面全体が本物に切り替わる（UI 側は ArenaGame インターフェースしか見ない）。
+ * createInstance() が本実装（DQ3ArenaGame + DQ3BattleEngine）を生成する。UI 側は ArenaGame
+ * インターフェースしか見ないので、エンジン差し替え（SfcDq3Rng 版など）もここだけで済む。
  *
  * drawPolicy は生成時オプションなので、設定変更のたびに実体を作り直す必要がある。
  * ArenaStore などは生成済みの ArenaGame 参照を握っているため、ここでは「委譲するだけの
  * 固定の窓口」を返し、中身の実体だけを差し替える。こうすると設定変更が次の試合から即反映される。
  */
 import type { ArenaGame } from '../core/arena/ArenaGame'
-import { createMockArenaGame } from '../core/arena/mockArenaGame'
+import { createDQ3ArenaGame } from '../core/arena/DQ3ArenaGame'
+import { DQ3BattleEngine } from '../core/battle/DQ3BattleEngine'
 import type { DrawPolicy } from '../core/arena/payout'
 import { DEFAULT_SETTINGS, loadSettings, type Stores } from '../storage/session'
 
@@ -23,8 +24,7 @@ export function readArenaGameConfig(stores: Stores): ArenaGameConfig {
 }
 
 function createInstance(config: ArenaGameConfig): ArenaGame {
-  // TODO(main): Battle Core 完成後に createDQ3ArenaGame({ engine, drawPolicy: config.drawPolicy }) へ
-  return createMockArenaGame({ drawPolicy: config.drawPolicy })
+  return createDQ3ArenaGame({ engine: new DQ3BattleEngine(), drawPolicy: config.drawPolicy })
 }
 
 let config: ArenaGameConfig = { drawPolicy: DEFAULT_SETTINGS.drawPolicy }
@@ -59,4 +59,4 @@ export function getArenaGame(): ArenaGame {
 }
 
 /** 本物か判別して「モック動作中」の注意を出すため */
-export const ARENA_GAME_IS_MOCK = true
+export const ARENA_GAME_IS_MOCK = false
