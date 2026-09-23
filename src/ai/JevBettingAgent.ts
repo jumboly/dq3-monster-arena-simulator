@@ -118,6 +118,8 @@ export class JevBettingAgent implements BettingAgent {
             elapsedMs: totalElapsed,
             detail: e.message,
             generationId: result.generationId,
+            // 形が想定と違った応答そのものを見られるようにする
+            exchange: result.exchange,
           })
         }
       }
@@ -139,6 +141,8 @@ export class JevBettingAgent implements BettingAgent {
       ...(result.generationId ? { generationId: result.generationId } : {}),
     }
     assertBetDecision(decision, observation)
+    // 検証後に付ける。exchange は表示用で、賭け判断の整合チェックの対象ではないため
+    decision.exchange = result.exchange
     return decision
   }
 

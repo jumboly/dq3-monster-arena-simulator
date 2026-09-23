@@ -676,3 +676,41 @@ ul.plain {
     order: -1;
   }
 }
+
+/* Jev とのやり取り表示。長い JSON でもページ幅を崩さないよう、枠内だけをスクロールさせる */
+.exchange {
+  margin-top: 0.75rem;
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+}
+.exchange summary {
+  cursor: pointer;
+}
+.exchange-body {
+  margin-top: 0.5rem;
+}
+.exchange-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+.exchange-head h4 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.exchange-pre {
+  max-height: 22rem;
+  overflow: auto;
+  margin: 0.3rem 0 0;
+  padding: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--muted);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  white-space: pre;
+}

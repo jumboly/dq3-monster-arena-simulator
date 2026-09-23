@@ -24,6 +24,33 @@ async function catchError(p: Promise<unknown>): Promise<AiGatewayError> {
 }
 
 describe('VercelGatewayClient', () => {
+  it('実際のやり取りを exchange に残す（キーは含めない）', async () => {
+    const { c } = client([unavailable, ok])
+    const r = await c.evaluate(request, { apiKey: FAKE_KEY })
+    expect(r.exchange.endpoint).toBe('https://ai-gateway.vercel.sh/v1/evaluate')
+    expect(r.exchange.requestBody).toEqual({ model: 'typesafe-ai/jev', ...request })
+    expect(r.exchange.requestHeaders.Authorization).toBe('Bearer [REDACTED]')
+    expect(r.exchange.status).toBe(200)
+    expect(r.exchange.responseBody).toEqual(ok.body)
+    expect(r.exchange.attempts).toBe(2)
+    expect(JSON.stringify(r.exchange)).not.toContain(FAKE_KEY)
+  })
+
+  it('失敗時は最後の応答を error.exchange に残す（キーは含めない）', async () => {
+    const { c } = client([unavailable])
+    const e = await catchError(c.evaluate(request, { apiKey: FAKE_KEY }))
+    expect(e.exchange?.status).toBe(503)
+    expect(e.exchange?.responseBody).toEqual(unavailable.body)
+    expect(e.exchange?.latencyMs).toBeNull()
+    expect(JSON.stringify(e.exchange)).not.toContain(FAKE_KEY)
+  })
+
+  it('応答本文にキーが反射されても伏せ字にする', async () => {
+    const { c } = client([{ status: 400, body: { error: { message: `bad key ${FAKE_KEY}` } } }])
+    const e = await catchError(c.evaluate(request, { apiKey: FAKE_KEY }))
+    expect(JSON.stringify(e.exchange)).not.toContain(FAKE_KEY)
+  })
+
   it('リクエスト形式: model / state / questions と Bearer ヘッダ', async () => {
     const { c, calls } = client([ok])
     const r = await c.evaluate(request, { apiKey: ` ${FAKE_KEY} ` })

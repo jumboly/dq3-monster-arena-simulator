@@ -50,6 +50,30 @@ export interface MatchObservation {
   }>
 }
 
+/**
+ * エージェントと外部 API の実際のやり取り（表示・学習用）。
+ *
+ * 「Jev に何を送り、何が返ったか」を利用者が確かめられるようにするため、エージェント共通の
+ * 形で持つ。API キーは含めない（ヘッダは伏せ字、本文にはもともとキーが入らない）。
+ */
+export interface AgentExchange {
+  endpoint: string
+  method: string
+  /** 送ったヘッダ（Authorization は伏せ字） */
+  requestHeaders: Record<string, string>
+  /** 送った本文（JSON） */
+  requestBody: unknown
+  /** 最後の試行の HTTP ステータス。通信自体が失敗したら null */
+  status: number | null
+  /** 最後の試行で受け取った本文（JSON として読めなければ文字列） */
+  responseBody: unknown
+  attempts: number
+  /** 成功した試行の往復時間 */
+  latencyMs: number | null
+  /** 再試行の待ちを含む全体の所要時間 */
+  elapsedMs: number
+}
+
 export interface BetDecision {
   /** contestants[].id のいずれか */
   bet: string
@@ -58,6 +82,8 @@ export interface BetDecision {
   reason: string
   /** 実装固有のメタ情報（モデル名・試行回数・所要時間など） */
   meta?: Record<string, string | number>
+  /** 外部 API との実際のやり取り（API を使わないエージェントでは省略） */
+  exchange?: AgentExchange
 }
 
 export interface BettingAgent {

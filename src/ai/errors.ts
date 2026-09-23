@@ -5,6 +5,7 @@
  * UI・自動プレイが「待てば直る失敗」と「キーや入力を直さないと直らない失敗」を
  * 区別できないと、無意味な再試行でレート制限を悪化させたり、逆に一時障害で止まったりする。
  */
+import type { AgentExchange } from './BettingAgent'
 
 export type AiFailureKind =
   /** 429。Gateway 側のレート制限。Retry-After（≈50 秒）を守る */
@@ -51,9 +52,12 @@ export interface AiGatewayErrorInit {
   detail?: string
   retryAfterMs?: number | null
   generationId?: string | null
+  exchange?: AgentExchange
 }
 
 export class AiGatewayError extends Error {
+  /** 失敗した最後の試行のやり取り（画面で「何が返ってきたか」を見せるため。キーは含まない） */
+  readonly exchange: AgentExchange | undefined
   readonly kind: AiFailureKind
   readonly status: number | null
   readonly attempts: number
@@ -75,6 +79,7 @@ export class AiGatewayError extends Error {
     this.detail = init.detail
     this.retryAfterMs = init.retryAfterMs ?? null
     this.generationId = init.generationId ?? null
+    this.exchange = init.exchange
   }
 
   get retryable(): boolean {

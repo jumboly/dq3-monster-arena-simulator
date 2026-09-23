@@ -9,6 +9,9 @@ import { Modal } from '../components/Modal'
 import { MonsterCard } from '../components/MonsterCard'
 import { ReplayView } from '../components/ReplayView'
 import { PredictionLine, ResultSummary } from '../components/RoundViews'
+import { ExchangeView } from '../components/ExchangeView'
+import type { AgentExchange } from '../../ai/BettingAgent'
+import { isAiGatewayError } from '../../ai/errors'
 import { Window } from '../components/Window'
 import { useArenaDeps, useArenaState, useAutoPlayState } from '../hooks/arenaContext'
 import { canAfford, currentOffer, predictionBySlot, winnerSlotOf } from '../logic/arenaFlow'
@@ -38,7 +41,7 @@ type JevState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ready'; slot: number; prediction: Prediction }
-  | { status: 'error'; message: string }
+  | { status: 'error'; message: string; exchange?: AgentExchange }
 
 function MatchPanel({ session, onNewSession, locked }: { session: Session; onNewSession: () => void; locked: boolean }) {
   const { game, store } = useArenaDeps()
@@ -75,7 +78,8 @@ function MatchPanel({ session, onNewSession, locked }: { session: Session; onNew
       if (!ac.signal.aborted) setJev({ status: 'ready', slot, prediction })
     } catch (e) {
       if (isAbortError(e) || ac.signal.aborted) return
-      setJev({ status: 'error', message: describeError(e) })
+      // 失敗時も最後に返ってきた本文を見せる（混雑の 503 などを利用者が自分で確かめられるように）
+      setJev({ status: 'error', message: describeError(e), exchange: isAiGatewayError(e) ? e.exchange : undefined })
     }
   }
 
@@ -143,6 +147,7 @@ function MatchPanel({ session, onNewSession, locked }: { session: Session; onNew
           {jev.status === 'error' && (
             <div className="notice error">
               <p>Jev の予測に失敗しました: {jev.message}</p>
+              {jev.exchange && <ExchangeView exchange={jev.exchange} />}
               <button type="button" className="dq-btn" onClick={ask}>
                 再試行
               </button>

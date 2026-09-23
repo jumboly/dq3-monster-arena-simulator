@@ -174,10 +174,21 @@ export function trimHistory(history: HistoryEntry[], logRetention = LOG_RETENTIO
   const kept = history.length > limit ? history.slice(history.length - limit) : history
   const cutoff = kept.length - logRetention
   return kept.map((e, i) => {
-    if (i >= cutoff || e.battle === undefined) return e
-    const { battle: _dropped, ...rest } = e
-    void _dropped
-    return rest
+    if (i >= cutoff) return e
+    // 古い試合は Battle Log と Jev とのやり取り（1 件数 KB）を落とす。どちらも容量の大半を占め、
+    // 勝敗・予測確率・seed は残るので統計とログ再生成には困らない
+    let out: HistoryEntry = e
+    if (out.battle !== undefined) {
+      const { battle: _dropped, ...rest } = out
+      void _dropped
+      out = rest
+    }
+    if (out.prediction?.decision.exchange !== undefined) {
+      const { exchange: _ex, ...decision } = out.prediction.decision
+      void _ex
+      out = { ...out, prediction: { ...out.prediction, decision } }
+    }
+    return out
   })
 }
 

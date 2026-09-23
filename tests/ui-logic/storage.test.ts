@@ -102,6 +102,17 @@ describe('history retention', () => {
     expect(t[0].battleSeed).toBe(1)
   })
 
+  it('古い試合からは Jev とのやり取り（exchange）も落とし、予測確率は残す', () => {
+    const exchange = { endpoint: 'e', method: 'POST', requestHeaders: {}, requestBody: { big: 'x'.repeat(100) }, status: 200, responseBody: {}, attempts: 1, latencyMs: 1, elapsedMs: 1 }
+    const h = Array.from({ length: 5 }, (_, i) => ({
+      ...entry(i + 1),
+      prediction: { agentId: 'jev', agentLabel: 'Jev', decision: { bet: 'monster-a', probabilities: { 'monster-a': 1 }, reason: 'r', exchange } },
+    }))
+    const t = trimHistory(h, 2)
+    expect(t.map((e) => e.prediction?.decision.exchange !== undefined)).toEqual([false, false, false, true, true])
+    expect(t[0].prediction?.decision.probabilities).toEqual({ 'monster-a': 1 })
+  })
+
   it('HISTORY_LIMIT を超えた古い履歴は捨てる', () => {
     const h = Array.from({ length: 12 }, (_, i) => entry(i + 1, false))
     expect(trimHistory(h, 0, 10).map((e) => e.round)).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12])

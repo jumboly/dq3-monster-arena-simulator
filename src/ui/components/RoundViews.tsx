@@ -5,6 +5,7 @@
 import type { MatchOffer } from '../../core/arena/types'
 import type { HistoryEntry, Prediction } from '../../storage/session'
 import { predictionBySlot, resultLabel, winnerName, winnerSlotOf } from '../logic/arenaFlow'
+import { ExchangeView } from './ExchangeView'
 import { formatGold, formatOdds, formatPercent, formatSignedGold, slotLetter } from '../logic/format'
 
 function oddsOf(offer: MatchOffer, slot: number): number {
@@ -94,6 +95,7 @@ export function PredictionLine({ offer, prediction }: { offer: MatchOffer; predi
             .join(' / ')}
         </p>
       )}
+      {prediction.decision.exchange && <ExchangeView exchange={prediction.decision.exchange} />}
     </div>
   )
 }

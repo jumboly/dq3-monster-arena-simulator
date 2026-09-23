@@ -12,6 +12,7 @@ import { AiGatewayError, RETRYABLE_KINDS, abortError, redactSecrets } from './er
 import type { AiFailureKind } from './errors'
 import { JEV_ENDPOINT, JEV_MODEL_ID } from './jevTypes'
 import type { JevEvaluateRequest } from './jevTypes'
+import type { AgentExchange } from './BettingAgent'
 import { SchemaError } from './schemas/validation'
 import { validateEvaluateEnvelope } from './schemas/evaluateResponse'
 import type { EvaluateEnvelope } from './schemas/evaluateResponse'
@@ -58,6 +59,8 @@ export interface EvaluateResult extends EvaluateEnvelope {
   latencyMs: number
   /** 保存・調査用の生応答（キーは含まれない：リクエストヘッダは載せていないため） */
   raw: unknown
+  /** 実際のリクエストとレスポンス（表示用。Authorization は伏せ字） */
+  exchange: AgentExchange
 }
 
 export interface EvaluateOptions {
@@ -73,6 +76,8 @@ const DEFAULTS = {
 }
 
 const DETAIL_MAX = 200
+/** JSON でない応答本文（HTML のエラーページ等）を表示用に残す上限 */
+const RAW_TEXT_MAX = 4000
 
 export function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -168,6 +173,19 @@ export class VercelGatewayClient {
     const body = JSON.stringify({ model: this.model, state: request.state, questions: request.questions })
     const startedAll = this.now()
     const redact = (s: string) => truncate(redactSecrets(s, [key]))
+    // 表示用のやり取り。本文は送ったものそのまま（キーは本文に入らない）、ヘッダだけ伏せ字にする
+    const exchangeOf = (status: number | null, parsed: unknown, text: string, attempt: number, latencyMs: number | null): AgentExchange => ({
+      endpoint: this.endpoint,
+      method: 'POST',
+      requestHeaders: { Authorization: 'Bearer [REDACTED]', 'Content-Type': 'application/json' },
+      requestBody: JSON.parse(body) as unknown,
+      status,
+      // 念のため応答にもキー文字列の伏せ字処理を通す（上流がエラー本文に入力を反射する場合に備える）
+      responseBody: parsed !== null ? (JSON.parse(redactSecrets(JSON.stringify(parsed), [key])) as unknown) : redactSecrets(text, [key]).slice(0, RAW_TEXT_MAX),
+      attempts: attempt,
+      latencyMs,
+      elapsedMs: this.now() - startedAll,
+    })
 
     let last: AiGatewayError | null = null
 
@@ -180,6 +198,7 @@ export class VercelGatewayClient {
       let detail = ''
       let retryAfterMs: number | null = null
       let parsed: unknown = null
+      let text = ''
 
       // 利用者の中断とタイムアウトを区別するため、タイムアウト用の controller を別に持つ
       const timeoutController = new AbortController()
@@ -195,7 +214,7 @@ export class VercelGatewayClient {
           signal: timeoutController.signal,
         })
         status = res.status
-        const text = await res.text()
+        text = await res.text()
         try {
           parsed = JSON.parse(text)
         } catch {
@@ -207,7 +226,14 @@ export class VercelGatewayClient {
             const envelope = validateEvaluateEnvelope(parsed)
             const latencyMs = this.now() - started
             this.onAttempt?.({ attempt, status, kind: null, latencyMs, waitMs: null, generationId: envelope.generationId })
-            return { ...envelope, attempts: attempt, elapsedMs: this.now() - startedAll, latencyMs, raw: parsed }
+            return {
+              ...envelope,
+              attempts: attempt,
+              elapsedMs: this.now() - startedAll,
+              latencyMs,
+              raw: parsed,
+              exchange: exchangeOf(status, parsed, text, attempt, latencyMs),
+            }
           } catch (e) {
             // 200 で形が違うのは契約の不一致。同じリクエストの再送では直らないので invalid で抜ける
             kind = 'invalid'
@@ -242,6 +268,7 @@ export class VercelGatewayClient {
         detail: detail ? redact(detail) : undefined,
         retryAfterMs,
         generationId,
+        exchange: exchangeOf(status, parsed, text || detail, attempt, null),
       })
 
       const retryable = RETRYABLE_KINDS.has(kind)
