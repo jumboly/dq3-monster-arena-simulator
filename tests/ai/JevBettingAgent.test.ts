@@ -161,7 +161,7 @@ describe.each(Object.values(PROMPTS).map((p) => [p.version, p] as [string, Promp
     contestants: slimeMatch('analyst').contestants.map((c) => ({
       ...c,
       stats: c.stats ?? { maxHp: 10, mp: 0, attack: 10, defense: 10, agility: 10 },
-      actions: [{ name: 'こうげき', replacedByAttack: false }],
+      actions: [{ name: 'こうげき', forbiddenInArena: false }],
       ai: { strategy: 'normal', selectionJudgment: 0, multiAction: 'single', concentrate: false },
     })),
   }

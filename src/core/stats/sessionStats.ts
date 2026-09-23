@@ -8,7 +8,7 @@
 
 export interface StatRecord {
   won: boolean
-  /** 引き分け（勝者なし）。won=false と区別して集計するため */
+  /** 引き分け（終了タイプ 7）。won=false と区別して集計するため。勝者なしのはずれ（6）は含めない */
   draw: boolean
   stake: number
   delta: number
@@ -79,7 +79,7 @@ export function normalizedProbabilities(r: StatRecord): Record<number, number> |
 
 /**
  * 多クラス Brier Score（1 試合あたり Σ_i (p_i - o_i)^2 の平均）。0 が最良、最大 2。
- * 引き分けはどの選手も勝っていないので o_i がすべて 0 として数える
+ * 引き分け・勝者なし（10 ターン経過のはずれ）はどの選手も勝っていないので o_i がすべて 0 として数える
  * （エージェントの確率は引き分けを含めない契約なので、引き分けは必ず減点になる）。
  */
 export function brierScore(records: StatRecord[]): { score: number | null; count: number } {

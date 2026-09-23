@@ -26,7 +26,7 @@ export function ResultSummary({ entry }: { entry: HistoryEntry }) {
         勝者:{' '}
         {winner
           ? `${slotLetter(winnerSlotOf(entry)!)}. ${winner}`
-          : `なし（引き分け${entry.summary.outcome.kind === 'draw' && entry.summary.outcome.reason === 'turn-limit' ? '・ターン上限' : ''}）`}
+          : noWinnerText(entry.summary.outcome)}
         <span className="muted"> / {entry.summary.turns} ターン</span>
       </p>
       <p className={`result-delta ${entry.delta >= 0 ? 'plus' : 'minus'}`}>{formatSignedGold(entry.delta)}</p>
@@ -96,4 +96,14 @@ export function PredictionLine({ offer, prediction }: { offer: MatchOffer; predi
       )}
     </div>
   )
+}
+
+/**
+ * 単独勝者がいない結末の説明。10 ターン経過時に賭けた選手が倒れていて他が 2 体以上残ると、
+ * 引き分けではなくハズレ（終了タイプ 6）になるので、引き分けと区別して表示する。
+ */
+function noWinnerText(o: HistoryEntry['summary']['outcome']): string {
+  if (o.kind === 'no-winner') return 'なし（10 ターン経過・賭けた選手は倒れたため はずれ）'
+  if (o.kind === 'draw') return o.reason === 'turn-limit' ? 'なし（10 ターン経過で引き分け）' : 'なし（全員倒れて引き分け）'
+  return 'なし'
 }

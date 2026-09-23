@@ -12,10 +12,11 @@
  * - ログに simple / detail / internal の 3 層がある
  */
 import type { InformationMode, MatchObservation } from '../../ai/BettingAgent'
-import type { BattleLogEntry, BattleResult, CombatantState, GroupId } from '../battle/types'
+import type { BattleLogEntry, BattleOutcome, BattleResult, CombatantState, GroupId } from '../battle/types'
 import type { CommandDef, CommandFlags, MonsterDef } from '../data/types'
 import { SeededRandom } from '../rng/RandomSource'
-import type { ArenaGame } from './ArenaGame'
+import type { ArenaGame, CardSummary } from './ArenaGame'
+import { settle, type DrawPolicy } from './payout'
 import type { ArenaRoundResult, Contestant, MatchOffer } from './types'
 
 const NO_FLAGS: CommandFlags = {
@@ -107,6 +108,7 @@ const MONSTERS: MonsterDef[] = [
   mon(3, 'キメラ', 30, 34, 26, 40),
   mon(4, 'さまようよろい', 45, 56, 60, 20),
   mon(5, 'ホイミスライム', 20, 18, 14, 16),
+  mon(6, 'ゴーレム', 90, 20, 90, 6),
 ]
 
 /** ダミーの試合カード（monsterId, baseOdds=倍率×10） */
@@ -131,11 +133,23 @@ const CARDS: Array<Array<[number, number]>> = [
     [5, 19],
     [2, 45],
   ],
+  // 硬い 2 体。10 ターン打ち切り（引き分け・勝者なし）の表示確認用
+  [
+    [4, 21],
+    [6, 25],
+  ],
 ]
 
-const TURN_LIMIT = 30
+/** 実機と同じく 10 ターンで打ち切る。終了タイプ 6/7 の分岐（はずれ・引き分け）を UI で確認できるようにするため */
+const TURN_LIMIT = 10
 
-export function createMockArenaGame(): ArenaGame {
+export interface MockArenaGameOptions {
+  /** 本実装（createDQ3ArenaGame）と同じ名前・既定値にして、provider の差し替えを機械的にするため */
+  drawPolicy?: DrawPolicy
+}
+
+export function createMockArenaGame(options: MockArenaGameOptions = {}): ArenaGame {
+  const drawPolicy = options.drawPolicy ?? 'refund'
   const monster = (id: number): MonsterDef => {
     const m = MONSTERS[id]
     if (!m) throw new RangeError(`mock monster ${id} not found`)
@@ -153,10 +167,8 @@ export function createMockArenaGame(): ArenaGame {
     return c.odds.integer + c.odds.tenths / 10
   }
 
-  return {
-    createOffer({ heroLevel, round, seed }) {
-      const rng = new SeededRandom(seed)
-      const cardIndex = rng.nextInt(CARDS.length)
+  const offerFor = (cardIndex: number, heroLevel: number, round: number): MatchOffer => {
+      if (!CARDS[cardIndex]) throw new RangeError(`mock card ${cardIndex} not found`)
       const contestants: Contestant[] = CARDS[cardIndex].map(([monsterId, baseOdds], slot) => ({
         slot,
         monsterId,
@@ -165,15 +177,43 @@ export function createMockArenaGame(): ArenaGame {
         odds: { integer: Math.floor(baseOdds / 10), tenths: baseOdds % 10 },
       }))
       return { round, cardIndex, heroLevel, stake: stakeFor(heroLevel), contestants }
+  }
+
+  return {
+    createOffer({ heroLevel, round, seed }) {
+      return offerFor(new SeededRandom(seed).nextInt(CARDS.length), heroLevel, round)
+    },
+
+    createOfferForCard({ cardIndex, heroLevel, round }) {
+      // モックのオッズは固定なので seed は使わない
+      return offerFor(cardIndex, heroLevel, round)
+    },
+
+    listCards(): CardSummary[] {
+      // 最後のカードを playable=false にして、本実装の「試合 38 = Phase B」表示を UI で確認できるようにする
+      const all = [...CARDS, [[3, 30], [3, 30], [3, 30]] as Array<[number, number]>]
+      return all.map((c, index) => ({ index, names: c.map(([id]) => monster(id).name), playable: index < CARDS.length }))
     },
 
     resolveBet({ offer, betSlot, goldBefore, battleSeed }): ArenaRoundResult {
       if (!offer.contestants.some((c) => c.slot === betSlot)) throw new RangeError(`betSlot ${betSlot} not in offer`)
       const battle = runDummyBattle(offer, betSlot, battleSeed, monster)
-      const won = battle.outcome.kind === 'winner' && battle.outcome.slot === betSlot
-      const payout = won ? Math.floor(offer.stake * oddsValue(offer, betSlot)) : 0
-      const delta = payout - offer.stake
-      return { offer, betSlot, battle, won, payout, delta, goldBefore, goldAfter: goldBefore + delta, battleSeed }
+      const odds = offer.contestants.find((c) => c.slot === betSlot)!.odds
+      const st = settle({ stake: offer.stake, odds, outcome: battle.outcome, betSlot, drawPolicy })
+      return {
+        offer,
+        betSlot,
+        battle,
+        won: st.won,
+        draw: st.draw,
+        endType: battle.outcome.endType,
+        drawPolicy,
+        payout: st.payout,
+        delta: st.delta,
+        goldBefore,
+        goldAfter: goldBefore + st.delta,
+        battleSeed,
+      }
     },
 
     stakeFor,
@@ -193,8 +233,18 @@ export function createMockArenaGame(): ArenaGame {
           return {
             ...base,
             stats: { maxHp: m.maxHp, mp: m.mp, attack: m.attack, defense: m.defense, agility: m.agility },
-            actions: m.commands.map((id) => ({ name: command(id).name, replacedByAttack: !command(id).flags.arenaAllowed })),
-            ai: { strategy: 'ランダム（モック）', selectionJudgment: m.selectionJudgment, multiAction: '1回', concentrate: m.concentrate },
+            actions: m.commands.map((id) => ({
+              name: command(id).name,
+              forbiddenInArena: !command(id).flags.arenaAllowed,
+              weight: 1 / 8,
+            })),
+            ai: {
+              strategy: 'ランダム（モック）',
+              selectionJudgment: m.selectionJudgment,
+              selectionJudgmentLabel: '単純',
+              multiAction: '1回',
+              concentrate: m.concentrate,
+            },
             traits: m.metal ? ['メタル'] : [],
             resistances: { ギラ: 0, ヒャド: 0, ラリホー: 0 },
           }
@@ -217,6 +267,8 @@ function runDummyBattle(
     const group = (c.slot === betSlot ? 4 : Math.min(i, 3)) as GroupId
     return {
       slot: c.slot,
+      combatantIndex: i,
+      transformMonsterId: c.monsterId,
       monsterId: c.monsterId,
       name: c.name,
       hp: m.maxHp,
@@ -238,6 +290,7 @@ function runDummyBattle(
       mpShortage: false,
       defenseModifier: 0,
       agilityModifier: 0,
+      turnAgility: m.agility,
       groupId: group,
       originalGroupId: group,
       isBetTarget: c.slot === betSlot,
@@ -250,12 +303,18 @@ function runDummyBattle(
   ]
   const alive = () => states.filter((s) => s.active && !s.dead)
   let turn = 0
-  let outcome: BattleResult['outcome'] | null = null
+  let outcome: BattleOutcome | null = null
 
   while (!outcome) {
     turn += 1
     if (turn > TURN_LIMIT) {
-      outcome = { kind: 'draw', reason: 'turn-limit', turn: TURN_LIMIT }
+      // 10 ターン経過: 賭けた選手が生きていれば引き分け(7)、倒れていれば はずれ(6)
+      const bet = states.find((x) => x.isBetTarget)
+      const survivors = alive().map((x) => x.slot)
+      outcome =
+        bet && !bet.dead
+          ? { kind: 'draw', reason: 'turn-limit', turn: TURN_LIMIT, endType: 7 }
+          : { kind: 'no-winner', reason: 'turn-limit', turn: TURN_LIMIT, endType: 6, survivors }
       break
     }
     log.push({ turn, kind: 'turn-start', simple: `― ターン ${turn} ―` })
@@ -294,21 +353,25 @@ function runDummyBattle(
       }
       const rest = alive()
       if (rest.length === 1) {
-        outcome = { kind: 'winner', slot: rest[0].slot, turn }
+        outcome = { kind: 'winner', slot: rest[0].slot, turn, endType: rest[0].slot === betSlot ? 5 : 6 }
         break
       }
       if (rest.length === 0) {
-        outcome = { kind: 'draw', reason: 'all-inactive', turn }
+        outcome = { kind: 'draw', reason: 'all-inactive', turn, endType: 7 }
         break
       }
     }
     log.push({ turn, kind: 'turn-end', simple: '', internal: { alive: alive().length } })
   }
 
+  // while (!outcome) を抜けた時点で必ず代入済み（ループ内のクロージャ越しの代入で TS の絞り込みが切れるため明示）
+  const final = outcome as BattleOutcome
   const endText =
-    outcome.kind === 'winner'
-      ? `${states.find((s) => s.slot === (outcome as { slot: number }).slot)?.name}の かち！`
-      : 'ひきわけ！'
-  log.push({ turn: outcome.turn, kind: 'battle-end', simple: endText, internal: { outcome: outcome.kind } })
-  return { outcome, turns: outcome.turn, log, finalStates: states, fidelityHits: { 'mock-battle': 1 } }
+    final.kind === 'winner'
+      ? `${states.find((x) => x.slot === final.slot)?.name}の かち！`
+      : final.kind === 'no-winner'
+        ? '10ターンが すぎた！ しょうしゃは きまらなかった…'
+        : 'ひきわけ！'
+  log.push({ turn: final.turn, kind: 'battle-end', simple: endText, internal: { outcome: final.kind, endType: final.endType } })
+  return { outcome: final, turns: final.turn, log, finalStates: states, fidelityHits: { 'mock-battle': 1 } }
 }

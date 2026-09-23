@@ -17,7 +17,9 @@ const TRIAL_CHOICES = [100, 1000, 5000, 10000]
 export function AnalysisPage() {
   const { game } = useArenaDeps()
   const { session } = useArenaState()
-  const [source, setSource] = useState<'current' | 'random'>(session ? 'current' : 'random')
+  const [source, setSource] = useState<'current' | 'card'>(session ? 'current' : 'card')
+  const cards = useMemo(() => game.listCards(), [game])
+  const [cardIndex, setCardIndex] = useState(() => cards.find((c) => c.playable)?.index ?? 0)
   const [heroLevel, setHeroLevel] = useState(session?.heroLevel ?? DEFAULT_HERO_LEVEL)
   const [offerSeed, setOfferSeed] = useState(() => randomSeed())
   const [trials, setTrials] = useState(1000)
@@ -31,8 +33,8 @@ export function AnalysisPage() {
 
   const offer = useMemo(() => {
     if (source === 'current' && session) return currentOffer(game, session)
-    return game.createOffer({ heroLevel: clampHeroLevel(heroLevel), round: 0, seed: offerSeed })
-  }, [game, session, source, heroLevel, offerSeed])
+    return game.createOfferForCard({ cardIndex, heroLevel: clampHeroLevel(heroLevel), round: 0, seed: offerSeed })
+  }, [game, session, source, cardIndex, heroLevel, offerSeed])
 
   const run = async () => {
     const ac = new AbortController()
@@ -74,11 +76,25 @@ export function AnalysisPage() {
             現在の試合{session ? `（第 ${session.round} 試合）` : '（セッションなし）'}
           </label>
           <label className="radio">
-            <input type="radio" checked={source === 'random'} onChange={() => setSource('random')} />
-            任意のカード
+            <input type="radio" checked={source === 'card'} onChange={() => setSource('card')} />
+            カードを選ぶ
           </label>
-          {source === 'random' && (
+          {source === 'card' && (
             <div className="autoplay-row">
+              <select
+                className="dq-select dq-select-wide"
+                value={cardIndex}
+                onChange={(e) => setCardIndex(Number(e.target.value))}
+                aria-label="試合カード"
+              >
+                {cards.map((c) => (
+                  // 未対応カード（試合 38 = Phase B）は選べないが、存在は一覧で見せる
+                  <option key={c.index} value={c.index} disabled={!c.playable}>
+                    試合 {c.index + 1}: {c.names.join(' / ')}
+                    {c.playable ? '' : '（Phase B・未対応）'}
+                  </option>
+                ))}
+              </select>
               <label>
                 Lv{' '}
                 <input
@@ -91,12 +107,12 @@ export function AnalysisPage() {
                 />
               </label>
               <button type="button" className="dq-btn dq-btn-small" onClick={() => setOfferSeed(randomSeed())}>
-                別のカードを引く
+                オッズを引き直す
               </button>
             </div>
           )}
           <div className="analysis-offer">
-            カード #{offer.cardIndex + 1}:{' '}
+            試合 {offer.cardIndex + 1}:{' '}
             {offer.contestants.map((c) => `${slotLetter(c.slot)}. ${c.name} ${formatOdds(game.oddsValue(offer, c.slot))}`).join(' / ')}
           </div>
           <div className="autoplay-row">
@@ -146,6 +162,8 @@ function DistributionTable({
   const { game } = useArenaDeps()
   const rows = dist.slots.map((j) => summarizeRow(dist.rows[j], dist.slots))
   const bestEv = Math.max(...rows.map((r) => r.meanDelta))
+  // 全行が同値（例: 全試合引き分け）のときは「最善の賭け先」が無いので強調しない
+  const bestUnique = rows.filter((r) => r.meanDelta === bestEv).length === 1
   return (
     <Window title={`結果${running ? '（計算中）' : aborted ? '（中止・途中まで）' : ''}`}>
       <div className="table-scroll">
@@ -160,6 +178,7 @@ function DistributionTable({
                 </th>
               ))}
               <th>引分</th>
+              <th title="10 ターン経過時に賭けた選手が倒れ、他が複数生存（終了タイプ 6）">勝者なし(はずれ)</th>
               <th>的中率</th>
               <th>平均T</th>
               <th>期待増減/試合</th>
@@ -170,7 +189,7 @@ function DistributionTable({
             {rows.map((r) => {
               const c = offer.contestants.find((x) => x.slot === r.betSlot)
               return (
-                <tr key={r.betSlot} className={r.meanDelta === bestEv && r.trials > 0 ? 'is-winner' : undefined}>
+                <tr key={r.betSlot} className={bestUnique && r.meanDelta === bestEv && r.trials > 0 ? 'is-winner' : undefined}>
                   <th>
                     {slotLetter(r.betSlot)}. {c?.name} {formatOdds(game.oddsValue(offer, r.betSlot))}
                   </th>
@@ -181,6 +200,7 @@ function DistributionTable({
                     </td>
                   ))}
                   <td>{formatPercent(r.drawProb)}</td>
+                  <td>{formatPercent(r.noWinnerProb)}</td>
                   <td>
                     {formatPercent(r.hitProb)}
                     <span className="muted small"> ±{(r.hitStdError * 100 * 1.96).toFixed(1)}</span>

@@ -98,7 +98,12 @@ describe('winDistribution', () => {
       delta,
       battle: {
         turns: 4,
-        outcome: winner === null ? { kind: 'draw', reason: 'turn-limit', turn: 4 } : { kind: 'winner', slot: winner, turn: 4 },
+        outcome:
+          winner === null
+            ? { kind: 'draw', reason: 'turn-limit', turn: 4, endType: 7 }
+            : winner === -1
+              ? { kind: 'no-winner', reason: 'turn-limit', turn: 4, endType: 6, survivors: [0, 1] }
+              : { kind: 'winner', slot: winner, turn: 4, endType: winner === betSlot ? 5 : 6 },
       },
     }) as unknown as ArenaRoundResult
 
@@ -116,6 +121,16 @@ describe('winDistribution', () => {
     expect(r0.meanDelta).toBeCloseTo(-20 / 3)
     expect(r0.returnRate).toBeCloseTo(280 / 300)
     expect(summarizeRow(d.rows[1], d.slots).hitProb).toBe(1)
+  })
+
+  it('勝者なし（終了タイプ 6）は引き分けと別に数える', () => {
+    const d = createWinDistribution([0, 1])
+    recordRound(d, round(0, -1, -100))
+    recordRound(d, round(0, null, 0))
+    const r = summarizeRow(d.rows[0], d.slots)
+    expect(r.noWinnerProb).toBe(0.5)
+    expect(r.drawProb).toBe(0.5)
+    expect(r.hitProb).toBe(0)
   })
 
   it('範囲外の betSlot は例外', () => {

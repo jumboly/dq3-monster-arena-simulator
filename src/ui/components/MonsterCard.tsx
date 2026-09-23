@@ -1,6 +1,6 @@
 import type { MatchObservation } from '../../ai/BettingAgent'
 import type { Contestant } from '../../core/arena/types'
-import { formatOdds, formatPercent, slotLetter } from '../logic/format'
+import { aggregateActions, formatOdds, formatPercent, slotLetter } from '../logic/format'
 
 type ObservedContestant = MatchObservation['contestants'][number]
 
@@ -69,9 +69,14 @@ export function MonsterCard({
       {observed?.actions && (
         <p className="monster-line">
           <span className="label">行動</span>
-          {observed.actions.map((a, i) => (
-            <span key={i} className={a.replacedByAttack ? 'struck' : undefined} title={a.replacedByAttack ? '格闘場では通常攻撃に置換' : undefined}>
+          {aggregateActions(observed.actions).map((a, i) => (
+            <span
+              key={i}
+              className={a.forbiddenInArena ? 'struck' : undefined}
+              title={a.forbiddenInArena ? '格闘場では選ばれない（他の行動から選び直す）' : `${a.slots} 枠`}
+            >
               {a.name}
+              {a.weight !== null && !a.forbiddenInArena && <span className="muted"> {formatPercent(a.weight, 0)}</span>}
             </span>
           ))}
         </p>
@@ -79,7 +84,8 @@ export function MonsterCard({
       {observed?.ai && (
         <p className="monster-line">
           <span className="label">AI</span>
-          {observed.ai.strategy} / 判断{observed.ai.selectionJudgment} / {observed.ai.multiAction}
+          {observed.ai.strategy} / {observed.ai.selectionJudgmentLabel ?? `判断${observed.ai.selectionJudgment}`} /{' '}
+          {observed.ai.multiAction}
           {observed.ai.concentrate ? ' / 集中' : ''}
         </p>
       )}

@@ -1,6 +1,6 @@
 import type { MatchObservation } from '../../ai/BettingAgent'
 import type { Contestant } from '../../core/arena/types'
-import { formatOdds, slotLetter } from '../logic/format'
+import { formatOdds, formatPercent, slotLetter } from '../logic/format'
 
 type ObservedContestant = MatchObservation['contestants'][number]
 
@@ -58,7 +58,8 @@ export function ContestantDetails({
                 {observed.actions.map((a, i) => (
                   <li key={i}>
                     {a.name}
-                    {a.replacedByAttack && <span className="muted">（格闘場では通常攻撃に置換）</span>}
+                    {a.weight !== undefined && !a.forbiddenInArena && <span className="muted"> 選択率 {formatPercent(a.weight, 1)}</span>}
+                    {a.forbiddenInArena && <span className="muted">（格闘場では選ばれない。他の行動から選び直す）</span>}
                   </li>
                 ))}
               </ol>
@@ -68,7 +69,11 @@ export function ContestantDetails({
             <>
               <h3>AI</h3>
               <p>
-                戦略: {observed.ai.strategy} / 選択判断: {observed.ai.selectionJudgment} / 複数回:{' '}
+                戦略: {observed.ai.strategy} / 選択判断:{' '}
+                {observed.ai.selectionJudgmentLabel
+                  ? `${observed.ai.selectionJudgmentLabel}（${observed.ai.selectionJudgment}）`
+                  : observed.ai.selectionJudgment}{' '}
+                / 複数回:{' '}
                 {observed.ai.multiAction} / 集中攻撃: {observed.ai.concentrate ? 'あり' : 'なし'}
               </p>
             </>

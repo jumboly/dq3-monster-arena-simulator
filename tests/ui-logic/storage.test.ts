@@ -123,6 +123,6 @@ describe('history retention', () => {
   it('設定は欠けた項目を既定値で埋める', () => {
     const storage = new MemoryStorage()
     storage.setItem('dq3arena.settings', JSON.stringify({ v: 1, data: { jevPolicy: 'max-win', autoPlayFailureLimit: 5 } }))
-    expect(loadSettings(createStores(storage))).toEqual({ jevPolicy: 'max-win', autoPlayFailureLimit: 5, useMockAgent: false })
+    expect(loadSettings(createStores(storage))).toEqual({ jevPolicy: 'max-win', autoPlayFailureLimit: 5, useMockAgent: false, drawPolicy: 'refund' })
   })
 })

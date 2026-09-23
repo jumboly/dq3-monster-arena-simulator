@@ -232,6 +232,10 @@ p {
 .dq-select {
   width: auto;
 }
+.dq-select-wide {
+  max-width: 100%;
+  min-width: 0;
+}
 .dq-input-short {
   width: 6em;
 }

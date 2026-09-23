@@ -230,3 +230,59 @@ describe('runAnalysis', () => {
     expect(a.dist).toEqual(b.dist)
   })
 })
+
+describe('contract v2 (listCards / createOfferForCard / drawPolicy)', () => {
+  it('listCards に選べないカードが含まれ、createOfferForCard は指定カードを返す', () => {
+    const cards = game.listCards()
+    expect(cards.some((c) => !c.playable)).toBe(true)
+    const playable = cards.filter((c) => c.playable)
+    for (const c of playable) {
+      const o = game.createOfferForCard({ cardIndex: c.index, heroLevel: 30, round: 0, seed: 1 })
+      expect(o.cardIndex).toBe(c.index)
+      expect(o.contestants.map((x) => x.name)).toEqual(c.names)
+    }
+  })
+
+  it('resolveBet は endType と drawPolicy を返し、履歴にも残る', () => {
+    const { entry, result } = playBet(game, newSession(), 0)
+    expect([5, 6, 7]).toContain(result.endType)
+    expect(result.endType === 5).toBe(result.won)
+    expect(entry.endType).toBe(result.endType)
+    expect(entry.drawPolicy).toBe('refund')
+  })
+
+  it('引き分けの払い戻しは drawPolicy に従う', () => {
+    const refund = createMockArenaGame({ drawPolicy: 'refund' })
+    const forfeit = createMockArenaGame({ drawPolicy: 'forfeit' })
+    // 引き分けになる組み合わせを探す（モックは 10 ターン打ち切り）
+    for (const card of refund.listCards().filter((c) => c.playable)) {
+      const offer = refund.createOfferForCard({ cardIndex: card.index, heroLevel: 30, round: 0, seed: 0 })
+      for (const c of offer.contestants) {
+        for (let seed = 0; seed < 300; seed++) {
+          const a = refund.resolveBet({ offer, betSlot: c.slot, goldBefore: 1000, battleSeed: seed })
+          if (!a.draw) continue
+          const b = forfeit.resolveBet({ offer, betSlot: c.slot, goldBefore: 1000, battleSeed: seed })
+          expect(a.delta).toBe(0)
+          expect(b.delta).toBe(-offer.stake)
+          return
+        }
+      }
+    }
+    throw new Error('引き分けの seed が見つからない')
+  })
+})
+
+describe('aggregateActions', () => {
+  it('同名の行動を合算し、禁止行動は別扱い', async () => {
+    const { aggregateActions } = await import('../../src/ui/logic/format')
+    const r = aggregateActions([
+      { name: 'こうげき', forbiddenInArena: false, weight: 0.25 },
+      { name: 'にげる', forbiddenInArena: true, weight: 0.25 },
+      { name: 'こうげき', forbiddenInArena: false, weight: 0.5 },
+    ])
+    expect(r).toEqual([
+      { name: 'こうげき', forbiddenInArena: false, weight: 0.75, slots: 2 },
+      { name: 'にげる', forbiddenInArena: true, weight: 0.25, slots: 1 },
+    ])
+  })
+})

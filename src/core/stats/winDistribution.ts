@@ -12,6 +12,8 @@ export interface BetRow {
   /** winnerSlot → 回数 */
   wins: Record<number, number>
   draws: number
+  /** 10 ターン経過で賭けた選手が倒れ、他が複数生存（終了タイプ 6・単独勝者なし）。引き分けとは払い戻しが違うので分ける */
+  noWinners: number
   totalTurns: number
   /** 所持金増減の合計（期待値 = totalDelta / trials） */
   totalDelta: number
@@ -31,6 +33,7 @@ export function createWinDistribution(slots: number[]): WinDistribution {
       trials: 0,
       wins: Object.fromEntries(slots.map((i) => [i, 0])),
       draws: 0,
+      noWinners: 0,
       totalTurns: 0,
       totalDelta: 0,
       totalStake: 0,
@@ -49,6 +52,7 @@ export function recordRound(dist: WinDistribution, result: ArenaRoundResult): vo
   row.totalStake += result.offer.stake
   const o = result.battle.outcome
   if (o.kind === 'winner') row.wins[o.slot] = (row.wins[o.slot] ?? 0) + 1
+  else if (o.kind === 'no-winner') row.noWinners += 1
   else row.draws += 1
 }
 
@@ -57,6 +61,7 @@ export interface BetRowSummary {
   trials: number
   winProb: Record<number, number>
   drawProb: number
+  noWinnerProb: number
   /** 賭けた選手が勝つ確率 */
   hitProb: number
   meanTurns: number
@@ -78,6 +83,7 @@ export function summarizeRow(row: BetRow, slots: number[]): BetRowSummary {
     trials: n,
     winProb,
     drawProb: n > 0 ? row.draws / n : 0,
+    noWinnerProb: n > 0 ? row.noWinners / n : 0,
     hitProb: hit,
     meanTurns: n > 0 ? row.totalTurns / n : 0,
     meanDelta: n > 0 ? row.totalDelta / n : 0,

@@ -33,6 +33,7 @@ export function buildExport(p: {
       jevPolicy: p.settings.jevPolicy,
       autoPlayFailureLimit: p.settings.autoPlayFailureLimit,
       useMockAgent: p.settings.useMockAgent,
+      drawPolicy: p.settings.drawPolicy,
     },
     session: p.session,
     history: p.history,

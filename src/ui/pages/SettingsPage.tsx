@@ -47,6 +47,30 @@ export function SettingsPage({ onSessionCleared }: { onSessionCleared: () => voi
         </label>
       </Window>
 
+      <Window title="引き分け時の払い戻し">
+        <p className="muted small">
+          引き分け（終了タイプ 7）で賭け金が返るかは実機の扱いが未解明です（U-20）。次の試合から反映されます。
+        </p>
+        <fieldset className="field">
+          <label className="radio">
+            <input
+              type="radio"
+              checked={settings.drawPolicy === 'refund'}
+              onChange={() => store.updateSettings({ drawPolicy: 'refund' })}
+            />
+            返金 <span className="muted small">賭け金が戻る（既定）</span>
+          </label>
+          <label className="radio">
+            <input
+              type="radio"
+              checked={settings.drawPolicy === 'forfeit'}
+              onChange={() => store.updateSettings({ drawPolicy: 'forfeit' })}
+            />
+            没収 <span className="muted small">賭け金は戻らない</span>
+          </label>
+        </fieldset>
+      </Window>
+
       {session && (
         <Window title="現在のセッション">
           <fieldset className="field">
