@@ -30,7 +30,7 @@ const ODDS_NOTE =
 
 const CLASSIC_NOTE = '観客として窓口で見られる情報（名前とオッズ）だけが与えられている。'
 const ANALYST_NOTE =
-  '能力値・行動・AI 設定・耐性が与えられている。actions の replacedByAttack が true の行動は格闘場では使えず、通常攻撃に置き換わる。'
+  '能力値・行動・AI 設定・耐性が与えられている。actions の forbiddenInArena が true の行動は格闘場では選ばれない（残りの行動から選び直す。すべて使えないときだけ通常攻撃）。'
 
 function buildState(observation: MatchObservation, labels: ContestantLabel[], options: BuildOptions): unknown {
   const analyst = observation.informationMode === 'analyst'

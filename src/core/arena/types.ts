@@ -1,7 +1,7 @@
 /**
  * 格闘場（窓口・マッチメイク・オッズ・配当）の契約。
  */
-import type { BattleResult } from '../battle/types'
+import type { ArenaEndType, BattleResult } from '../battle/types'
 
 /** 表示オッズ。実機は整数部と小数 1 桁を別々に持つので、浮動小数ではなく整数対で保持する */
 export interface Odds {
@@ -23,6 +23,10 @@ export interface MatchOffer {
   /** 0 始まりの試合 ID（$C30DC5 の添字） */
   cardIndex: number
   heroLevel: number
+  /** 試合 38 を候補から除いて抽選したか（Phase B 未実装のための近似） */
+  excludedShadowMatch?: boolean
+  /** 暫定のオッズ境界処理（U-18）を通った選手数 */
+  provisionalOddsCount?: number
   stake: number
   contestants: Contestant[]
 }
@@ -32,6 +36,12 @@ export interface ArenaRoundResult {
   betSlot: number
   battle: BattleResult
   won: boolean
+  /** 引き分け（終了タイプ 7） */
+  draw: boolean
+  /** ROM の終了タイプ 5 当たり / 6 ハズレ / 7 引き分け */
+  endType: ArenaEndType
+  /** 引き分けの払い戻しをどの前提で計算したか（実機の扱いは未解明: U-20） */
+  drawPolicy: 'refund' | 'forfeit'
   /** 払い戻し額（賭け金を含む総額。負けなら 0） */
   payout: number
   /** 所持金の増減（payout - stake） */

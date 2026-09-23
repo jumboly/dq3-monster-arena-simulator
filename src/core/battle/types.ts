@@ -23,6 +23,10 @@ export const BET_GROUP: GroupId = 4
 export interface CombatantState {
   /** 戦闘員スロット（格闘場では出場順 0..3） */
   slot: number
+  /** 戦闘員インデックス 0..23。行動順の同値タイブレークと複数対象の処理順に効く */
+  combatantIndex: number
+  /** あやしいかげの実体など、ステータスの出どころとなるモンスター ID（通常は monsterId と同じ） */
+  transformMonsterId: number
   monsterId: number
   name: string
   hp: number
@@ -46,9 +50,14 @@ export interface CombatantState {
   resting: boolean
   mpShortage: boolean
 
-  /** スクルト・ルカナン等の累積補正（実装側で解釈を定義する） */
+  /**
+   * 基礎値との差（表示用）。ROM は補正量ではなく現在値（defense / agility）を直接書き換える
+   * （$0299F5）ので、計算には使わず、現在値 − 基礎値として導出する。
+   */
   defenseModifier: number
   agilityModifier: number
+  /** ターン中の素早さ（コマンド実行優位 $2045） */
+  turnAgility: number
 
   groupId: GroupId
   originalGroupId: GroupId
@@ -60,9 +69,22 @@ export interface CombatantState {
   duplicateIndex: number
 }
 
+/**
+ * 戦闘の結末。ROM の終了タイプ（$7E23AB bit0-3）5 当たり / 6 ハズレ / 7 引き分け を保持する。
+ *
+ * winner / draw だけでは「10 ターン経過時に賭けた選手が死亡し、他が 2 体以上生存」
+ * （タイプ 6 だが単独の勝者がいない）を表せないため no-winner を分けている
+ * （docs/research/battle-spec.md §8.2, §8.3）。
+ */
+export type ArenaEndType = 5 | 6 | 7
+
 export type BattleOutcome =
-  | { kind: 'winner'; slot: number; turn: number }
-  | { kind: 'draw'; reason: 'all-inactive' | 'turn-limit'; turn: number }
+  /** 生存者が 1 体になった。賭けた選手なら endType 5、それ以外なら 6 */
+  | { kind: 'winner'; slot: number; turn: number; endType: 5 | 6 }
+  /** 生存 0 体、または 10 ターン終了時に賭けた選手が生存（endType 7） */
+  | { kind: 'draw'; reason: 'all-inactive' | 'turn-limit'; turn: number; endType: 7 }
+  /** 10 ターン終了時、賭けた選手は既に倒れ、他が 2 体以上生存（endType 6） */
+  | { kind: 'no-winner'; reason: 'turn-limit'; turn: number; endType: 6; survivors: number[] }
 
 /** ログ 1 件。Simple / Detail / Internal の 3 層を同じイベントに持たせる。 */
 export interface BattleLogEntry {
@@ -95,8 +117,13 @@ export interface ArenaBattleSetup {
   /** マッチメイクで決まった出場モンスター ID（出場順） */
   monsterIds: number[]
   heroLevel: number
-  /** 賭けたスロット。Group 4 の分岐が結果分布を変えうるため入力に含める */
+  /**
+   * 賭けたスロット。Group 4 の分岐が結果分布を変えうるため入力に含める。
+   * null（賭けなし観戦）は SFC に存在しないので、Group 4 なしで走らせ fidelityHits に計上する。
+   */
   betSlot: number | null
+  /** 隊列先頭のレベル。あやしいかげの実体決定に使う（主人公レベルとは別。省略時 heroLevel） */
+  leaderLevel?: number
 }
 
 export interface BattleResult {

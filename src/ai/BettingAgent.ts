@@ -11,8 +11,13 @@ export type InformationMode = 'classic' | 'analyst'
 
 export interface ObservedAction {
   name: string
-  /** 格闘場で禁止され通常攻撃に置き換わるか */
-  replacedByAttack: boolean
+  /**
+   * 格闘場使用許可が 0 の行動か。ROM はこの行動を「通常攻撃に置き換える」のではなく
+   * 除外して再抽選し、全行動が除外されたときだけ通常攻撃にする（battle-spec §4.3）。
+   */
+  forbiddenInArena: boolean
+  /** コマンド決定戦略による選択確率（分母 256 を正規化した値）。ローテーション戦略では省略 */
+  weight?: number
 }
 
 export interface MatchObservation {
@@ -35,6 +40,8 @@ export interface MatchObservation {
     ai?: {
       strategy: string
       selectionJudgment: number
+      /** 選択判断の表示名（単純 / 標準 / 賢い） */
+      selectionJudgmentLabel?: string
       multiAction: string
       concentrate: boolean
     }

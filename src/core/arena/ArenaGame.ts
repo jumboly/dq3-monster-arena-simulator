@@ -8,9 +8,21 @@ import type { CommandDef, MonsterDef } from '../data/types'
 import type { InformationMode, MatchObservation } from '../../ai/BettingAgent'
 import type { ArenaRoundResult, MatchOffer } from './types'
 
+export interface CardSummary {
+  /** 0 始まり（UI の「試合 N」は index + 1） */
+  index: number
+  names: string[]
+  /** この試合が現在のエンジンで遊べるか（試合 38 は Phase B） */
+  playable: boolean
+}
+
 export interface ArenaGame {
   /** 所持金に関係なく試合を生成する（賭け金が払えるかの判定は呼び出し側） */
   createOffer(params: { heroLevel: number; round: number; seed: number }): MatchOffer
+  /** 試合カードを指定して生成する（Analysis 用。オッズは seed で抽選） */
+  createOfferForCard(params: { cardIndex: number; heroLevel: number; round: number; seed: number }): MatchOffer
+  /** 全 38 カードの一覧 */
+  listCards(): CardSummary[]
   /** 賭けて戦闘を実行し、配当まで確定させる。seed が同じなら結果は同じ */
   resolveBet(params: { offer: MatchOffer; betSlot: number; goldBefore: number; battleSeed: number }): ArenaRoundResult
   /** 賭け金（主人公レベル × 10G） */
