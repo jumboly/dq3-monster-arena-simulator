@@ -1,0 +1,25 @@
+/**
+ * 再現度の区分。
+ *
+ * このプロジェクトは「それっぽい戦闘」ではなく公開解析に基づく再現を目的とするため、
+ * 仕様ごとに根拠の強さを明示する。コード中の定数・分岐にはこの区分と出典を添える。
+ */
+export type Fidelity =
+  /** ROM 解析資料（逆アセンブル・データダンプ）で確認済み */
+  | 'confirmed'
+  /** 資料から強く示唆されるが、該当コードの完全な確認はしていない */
+  | 'likely'
+  /** 意図的な近似（実機と分布または挙動が異なりうる） */
+  | 'approximation'
+  /** 未解明。推測で補完せず、暫定挙動を明記して Issue に残す */
+  | 'unknown'
+
+export interface FidelityNote {
+  id: string
+  fidelity: Fidelity
+  summary: string
+  /** 出典（URL と節・アドレス） */
+  sources: string[]
+  /** unknown の場合の GitHub Issue 番号など */
+  issue?: string
+}

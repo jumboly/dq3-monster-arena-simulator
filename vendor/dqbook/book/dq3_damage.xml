@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE section PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
+  "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" [
+  <!ENTITY % replacement SYSTEM "replacement.xml">
+  %replacement;
+]>
+
+<section id="dq3.damage"><?dbhtml filename="dq3_damage.html" ?>
+<title>ダメージ</title>
+<indexterm id="term.dq3.damage"><primary>ダメージ</primary><secondary>DQ3</secondary></indexterm>
+<para>
+本節ではダメージ構造体を説明する。
+ここで議論するのはダメージのいわば基本量についてであり、
+コマンドとキャラクターの状態から決定する、ダメージの計算処理過程の全てを網羅するものではないことを断っておく。
+</para>
+<para>
+また、ダメージ構造体関連の議論に出てくる「ダメージ」という用語だが、
+本書で言うダメージとは、通常の意味に加えて、回復量や永続的な属性値をも含むものとする。
+抽象的に表現すると「キャラクターの属性値であり、数量的に表現されているものに対する変化量」ということになるだろうか。
+</para>
+
+<section id="dq3.damage.structure">
+<title>構造に関する構成要素</title>
+
+<section id="dq3.damage.structure.C23BB4">
+<title>構造体 <varname>$C23BB4</varname>: ダメージ</title>
+<para>
+アドレス <varname>$C23BB4</varname> から 50 個、ダメージパターンが定義されている。
+各要素のサイズは 5 バイトで、メモリーレイアウトは次に示すとおりだ：
+</para>
+<table id="table.dq3.C23BB4" class="lighttable">
+  <caption>構造体 $C23BB4</caption>
+  <thead>
+    <tr><th>オフセット</th><th>桁</th><th>属性</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><literal>#$00</literal></td><td><literal>#$03FF</literal></td><td>自陣側実行時の下限値</td></tr>
+    <tr><td><literal>#$01</literal></td><td><literal>#$0FFC</literal></td><td>敵陣側実行時の下限値</td></tr>
+    <tr><td><literal>#$02</literal></td><td><literal>#$3FF0</literal></td><td>自陣側実行時の上限値</td></tr>
+    <tr><td><literal>#$03</literal></td><td><literal>#$FFC0</literal></td><td>敵陣側実行時の上限値</td></tr>
+  </tbody>
+</table>
+<para>
+各属性の意味を以下に記す：
+</para>
+<variablelist>
+  <varlistentry>
+    <term>自陣側実行時の下限値</term>
+    <term>敵陣側実行時の下限値</term>
+    <listitem>
+      <para>
+        それぞれ自陣側戦闘員と敵陣側戦闘員が実行するコマンドから決まるダメージの下限値を表す属性だ。
+        値が 1,023 のときはマジックナンバーとして取り扱う。
+        このときは後述の抽選を適用せず、値を 65,535 とする。
+      </para>
+    </listitem>
+  </varlistentry>
+  <varlistentry>
+    <term>自陣側実行時の上限値</term>
+    <term>敵陣側実行時の上限値</term>
+    <listitem>
+      <para>
+        それぞれ自陣側戦闘員と敵陣側戦闘員が実行するコマンドから決まるダメージの上限値を表す属性だ。
+      </para>
+    </listitem>
+  </varlistentry>
+</variablelist>
+<para>
+ROM データをダンプして属性値を検討すると、自陣と敵陣とで威力が異なるコマンドはそれほど多くないことがわかる。
+一部の攻撃コマンドしか該当しない。
+そのようなダメージについては、いずれも自陣実行時のほうが敵陣のそれよりも大きい値が設定されている。
+</para>
+</section> <!-- dq3.damage.structure.C23BB4 -->
+
+<section id="dq3.damage.structure.methods">
+<title>構造体の属性へのアクセス</title>
+<para>
+ダメージ構造体のフィールドにアクセスする専用サブルーチンはいくつかあるのだが、
+実際にプログラムから参照されているものは <varname>$C2CCF8</varname> サブルーチンだけであるようだ。
+このサブルーチンは 4 byte のパラメーターをとり、
+その意味はいつもと同じようなものなので、説明を省く。
+</para>
+<table id="table.dq3.damage.methods" class="lighttable">
+  <caption>ダメージ構造体の属性にアクセスするサブルーチン</caption>
+  <thead>
+    <tr><th>サブルーチン</th><th>固定引数長</th><th>入力</th><th>機能</th></tr>
+  </thead>
+  <tbody>
+    <tr><td align="center"><varname>$C2CCCF</varname></td><td>2</td><td>x</td><td>2 バイト長の属性値を取得する（未使用）</td></tr>
+    <tr><td align="center"><varname>$C2CCD6</varname></td><td>2</td><td>y</td><td>2 バイト長の属性値を取得する（未使用）</td></tr>
+    <tr><td align="center"><varname>$C2CCF1</varname></td><td>4</td><td>x</td><td>ビットフィールド属性値を取得する（未使用）</td></tr>
+    <tr><td align="center"><varname>$C2CCF8</varname></td><td>4</td><td>y</td><td>ビットフィールド属性値を取得する</td></tr>
+    <tr><td align="center"><varname>$C2CD13</varname></td><td>4</td><td>x</td><td>ビットフィールド属性値をテストする（未使用）</td></tr>
+    <tr><td align="center"><varname>$C2CD1A</varname></td><td>4</td><td>y</td><td>ビットフィールド属性値をテストする（未使用）</td></tr>
+  </tbody>
+</table>
+</section> <!-- dq3.damage.structure.methods -->
+</section> <!-- dq3.damage.structure -->
+
+<section id="dq3.damage.behavior">
+<title>振る舞いに関する構成要素</title>
+
+<section id="dq3.damage.behavior.C90AF7">
+<title>サブルーチン <varname>$C90AF7</varname>: ダメージ決定サブルーチン</title>
+<para>
+コマンドのダメージ（基本量）を決定するのはサブルーチン <varname>$C90AF7</varname> だ。
+コマンド実行者とコマンドを入力とし、ダメージ量を出力とする関数とみなすのが理解しやすい。
+コードの概要を以下に示す。
+</para>
+<programlisting><!-- NO CDATA -->
+C9/0AF7:    08          PHP
+C9/0AF8:    8B          PHB
+C9/0AF9:    C230        REP #$30
+C9/0AFB:    F47E7E      PEA $7E7E
+C9/0AFE:    AB          PLB
+C9/0AFF:    AB          PLB
+C9/0B00:    DA          PHX
+C9/0B01:    5A          PHY
+C9/0B02:    AEEE23      LDX $23EE
+C9/0B05:    ACE423      LDY $23E4
+C9/0B08:    22E0CAC2    JSR $C2CAE0    <co id="dq3.damage.C90AF7.C2CAE0" />
+C9/0B0C:    3C20
+C9/0B0E:    FF00
+C9/0B10:    C90500      CMP #$0005
+C9/0B13:    9030        BCC $0B45      if(a &lt; 5) goto 実行者が敵陣戦闘員
+
+C9/0B15:    A9FFFF      LDA #$FFFF     ; 65,535
+C9/0B18:    48          PHA
+C9/0B19:    2225CCC2    JSR $C2CC25    <co id="dq3.damage.C90AF7.C2CC25.1" />
+C9/0B1D:    7218
+C9/0B1F:    FF00
+C9/0B21:    A8          TAY
+C9/0B22:    22F8CCC2    JSR $C2CCF8    <co id="dq3.damage.C90AF7.C2CCF8.1" />
+C9/0B26:    443B
+C9/0B28:    FF03
+C9/0B2A:    C9FF03      CMP #$03FF
+C9/0B2D:    F03E        BEQ $0B6D      if(属性値 == 1023) goto 終了
+C9/0B2F:    AA          TAX
+C9/0B30:    22F8CCC2    JSR $C2CCF8    <co id="dq3.damage.C90AF7.C2CCF8.2" />
+C9/0B34:    463B
+C9/0B36:    F03F
+C9/0B38:    802E        BRA $0B68      goto 抽選
+
+.label 実行者が敵陣戦闘員
+C9/0B45:    A9FFFF      LDA #$FFFF     ; 65,535
+C9/0B48:    48          PHA
+C9/0B49:    2225CCC2    JSR $C2CC25    <co id="dq3.damage.C90AF7.C2CC25.2" />
+C9/0B4D:    7218
+C9/0B4F:    FF00
+C9/0B51:    A8          TAY
+C9/0B52:    22F8CCC2    JSR $C2CCF8    <co id="dq3.damage.C90AF7.C2CCF8.3" />
+C9/0B56:    453B
+C9/0B58:    FC0F
+C9/0B5A:    C9FF03      CMP #$03FF
+C9/0B5D:    F00E        BEQ $0B6D      if(属性値 == 1023) goto 終了
+C9/0B5F:    AA          TAX
+C9/0B60:    22F8CCC2    JSR $C2CCF8    <co id="dq3.damage.C90AF7.C2CCF8.4" />
+C9/0B64:    473B
+C9/0B66:    C0FF
+.label 抽選
+C9/0B68:    20750B      JSR $0B75      <co id="dq3.damage.C90AF7.rand" />
+C9/0B6B:    8301        STA $01,S
+.label 終了
+C9/0B6D:    68          PLA
+C9/0B6E:    7A          PLY
+C9/0B6F:    FA          PLX
+C9/0B70:    AB          PLB
+C9/0B71:    28          PLP
+C9/0B72:    48          PHA
+C9/0B73:    68          PLA
+C9/0B74:    6B          RTL
+</programlisting>
+<calloutlist>
+  <callout arearefs="dq3.damage.C90AF7.C2CAE0">
+    <para>
+      <xref linkend="dq3.combatants.methods"/> で述べるように、
+      サブルーチン <varname>$C2CAE0</varname> の呼び出しは、
+      戦闘キャラクター <literal>Y</literal> の各種状態を表す構造体オブジェクトから、
+      指定の状態を取得することを意味する。
+    </para>
+  </callout>
+  <callout arearefs="dq3.damage.C90AF7.C2CC25.1
+                     dq3.damage.C90AF7.C2CC25.2" >
+    <para>
+      サブルーチン <varname>$C2CC25</varname> を呼び出し、
+      戦闘コマンドの属性値を取得する。
+      ここでは引数として <literal>#$1872</literal> と <literal>#$00FF</literal> を渡して、
+      この戦闘コマンド <literal>X</literal> に関連付けられているダメージオブジェクトの ID を取得する。
+    </para>
+  </callout>
+  <callout arearefs="dq3.damage.C90AF7.C2CCF8.1
+                     dq3.damage.C90AF7.C2CCF8.2
+                     dq3.damage.C90AF7.C2CCF8.3
+                     dq3.damage.C90AF7.C2CCF8.4" >
+    <para>
+      サブルーチン <varname>$C2CCF8</varname> を呼び出し、
+      ダメージオブジェクトから指定の属性値を取得する。
+      ここで与えている引数と、取得するメンバーの対応は <xref linkend="table.dq3.C23BB4"/> を参照。
+      オフセットについては <literal>#$3BB4</literal> を <literal>#$00</literal> と解釈し、
+      以下同様とする。
+    </para>
+  </callout>
+  <callout arearefs="dq3.damage.C90AF7.rand">
+    <para>
+      同バンクサブルーチン <varname>$0B75</varname> を呼び出すことで、
+      範囲 <literal>[X, A]</literal> に含まれる値を抽選する。
+      この乱数を <literal>A</literal> に入れた状態でサブルーチンを終了する。
+    </para>
+  </callout>
+</calloutlist>
+<para>
+このサブルーチンは戦闘中に呼び出される。
+</para>
+</section> <!-- dq3.damage.behavior.C90B3A -->
+
+<section id="dq3.damage.behavior.C90B3A">
+<title>サブルーチン <varname>$C90B3A</varname>: ダメージ決定サブルーチン</title>
+<para>
+こちらのサブルーチンもコマンドのダメージ（基本量）を決定する。
+先ほどのものとは、入力が X レジスターであることしか違わない。コマンド ID からだけでダメージ値を決定する。
+実行者は敵陣側に決め打ちとなる。
+</para>
+<para>
+このサブルーチンは移動モードのじゅもんまたはどうぐコマンドから利用されている。
+だから実行者を敵陣側ではなく自陣側に決め打ったほうが論理的だと思われるのに、そうなっていない。
+しかし、データ上は戦闘時と移動時の両方で実行できるコマンドについては、
+陣営によらずダメージ量が同じなので問題は起こらない。
+</para>
+</section> <!-- dq3.damage.behavior.C90B3A -->
+</section> <!-- dq3.damage.behavior -->
+</section> <!-- dq3.damage -->

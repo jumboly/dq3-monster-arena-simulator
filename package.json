@@ -1,0 +1,32 @@
+{
+  "name": "dq3-monster-arena-simulator",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "data": "tsx scripts/build-data.ts",
+    "dev": "npm run data && vite",
+    "build": "npm run data && tsc -b && vite build",
+    "test": "npm run data && vitest run",
+    "test:watch": "vitest",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11"
+  },
+  "description": "SFC版ドラゴンクエストIII モンスター格闘場の非公式シミュレーター（公開解析情報に基づく技術検証）",
+  "license": "MIT"
+}

@@ -1,0 +1,35 @@
+# Dependencies / build output
+node_modules
+dist
+*.tsbuildinfo
+coverage
+
+# ROM 由来の生成データは配布物に含めない方針のため、ビルド時に再生成する
+src/data/generated/
+.cache/
+
+# Secrets: 開発用の AI Gateway キーを誤ってコミットしないため
+.env
+.env.*
+!.env.example
+*.key
+
+# ROM やその断片を誤って追加しないため
+*.sfc
+*.smc
+*.fig
+*.swc
+*.bin
+
+# Dev probe outputs (may contain raw API responses)
+logs/
+probe-results/
+
+# Editor / OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# RetroGameHackers 記事のローカル写し。著作物のため公開リポジトリには含めない（出典は README に URL で記載）
+research/rgh/
