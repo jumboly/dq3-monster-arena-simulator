@@ -2,9 +2,21 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { createStores } from './storage/session'
+import { getArenaGame } from './ui/arenaGameProvider'
+import { ArenaContext, type ArenaDeps } from './ui/hooks/arenaContext'
+import { ArenaStore } from './ui/logic/arenaStore'
+import { AutoPlayController } from './ui/logic/autoPlayController'
+
+// 依存の組み立てはここ 1 か所。StrictMode の二重描画でストアが作り直されないよう React の外で作る
+const game = getArenaGame()
+const store = new ArenaStore(game, createStores())
+const deps: ArenaDeps = { game, store, autoPlay: new AutoPlayController(game, store) }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ArenaContext.Provider value={deps}>
+      <App />
+    </ArenaContext.Provider>
   </StrictMode>,
 )

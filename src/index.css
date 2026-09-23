@@ -1,111 +1,674 @@
+/*
+ * ドラクエ風の黒地・白枠ウィンドウ。画像・Web フォントは使わず CSS だけで雰囲気を出す
+ * （著作物を含めない方針と、GitHub Pages で軽く配信するため）。
+ * 配色はトークンに集約し、ダークテーマ固定（ゲーム画面の雰囲気を優先）。
+ */
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --bg: #07071a;
+  --win-bg: #000;
+  --fg: #f4f4f4;
+  --muted: #a3a3b8;
+  --border: #f4f4f4;
+  --accent: #ffd84a;
+  --win: #7cf29a;
+  --lose: #ff7b7b;
+  --draw: #9fc3ff;
+  --warn: #ffc46b;
+  --radius: 8px;
+  --gap: 12px;
+  --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic UI', sans-serif;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
+  color-scheme: dark;
+  font: 16px/1.6 var(--sans);
+  color: var(--fg);
   background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  -webkit-text-size-adjust: 100%;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
+* {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  background: var(--bg);
+  min-height: 100svh;
+}
+
+#root {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 12px 16px 32px;
 }
 
 h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+h2,
+h3 {
+  margin: 0;
+  font-weight: 700;
 }
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
+h3 {
+  font-size: 1rem;
+  margin: 16px 0 6px;
+  color: var(--accent);
 }
 p {
+  margin: 4px 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 0.85rem;
+}
+.center {
+  text-align: center;
+}
+.plus {
+  color: var(--win);
+}
+.minus {
+  color: var(--lose);
+}
+.error {
+  color: var(--lose);
+}
+.warn {
+  color: var(--warn);
+}
+
+/* --- ヘッダ ------------------------------------------------------------- */
+.app-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: var(--gap);
+}
+.app-title {
+  font-size: 1.3rem;
+  letter-spacing: 0.05em;
+}
+.status-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  padding: 6px 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--win-bg);
+}
+.app-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tab-sub {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.app-main {
+  display: block;
+}
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+.app-footer {
+  margin-top: 24px;
+  text-align: center;
+}
+
+/* --- DQ ウィンドウ ------------------------------------------------------- */
+.dq-window {
+  background: var(--win-bg);
+  color: var(--fg);
+  border: 3px solid var(--border);
+  border-radius: var(--radius);
+  /* 内側の細い黒線 + 外側の影で、実機ウィンドウの二重枠っぽさを出す */
+  box-shadow:
+    inset 0 0 0 2px #000,
+    inset 0 0 0 3px #555,
+    0 0 0 2px #000;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.dq-window-title {
+  font-size: 1.05rem;
+  margin-bottom: 8px;
+  color: var(--accent);
+}
+
+/* --- ボタン・入力 --------------------------------------------------------- */
+.dq-btn,
+.dq-tab {
+  font: inherit;
+  color: var(--fg);
+  background: #000;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  position: relative;
+  min-height: 40px;
+  touch-action: manipulation;
+}
+.dq-btn:hover:not(:disabled),
+.dq-btn:focus-visible,
+.dq-tab:hover,
+.dq-tab:focus-visible {
+  background: #1b1b3a;
+  outline: none;
+}
+/* 選択カーソル ▶ 。フォーカス・ホバー中のボタンを DQ のコマンド選択風に示す */
+.dq-btn:not(:disabled):hover::before,
+.dq-btn:focus-visible::before {
+  content: '▶';
+  position: absolute;
+  left: -2px;
+  top: 50%;
+  transform: translate(-100%, -50%);
+  font-size: 0.8em;
+  color: var(--fg);
+  animation: blink 1s steps(1) infinite;
+}
+.dq-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.dq-btn-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+.dq-btn-danger {
+  border-color: var(--lose);
+  color: var(--lose);
+}
+.dq-btn-small {
+  padding: 2px 10px;
+  min-height: 32px;
+  font-size: 0.9rem;
+}
+.dq-tab.is-active {
+  background: var(--fg);
+  color: #000;
+}
+.dq-tab.is-active .tab-sub {
+  color: #333;
+}
+.dq-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.dq-tabs .dq-tab {
+  min-height: 32px;
+  padding: 2px 12px;
+  font-size: 0.9rem;
+}
+
+.dq-input,
+.dq-select {
+  font: inherit;
+  color: var(--fg);
+  background: #000;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-height: 40px;
+  width: 100%;
+  max-width: 420px;
+}
+.dq-select {
+  width: auto;
+}
+.dq-input-short {
+  width: 6em;
+}
+.dq-input[aria-invalid='true'] {
+  border-color: var(--lose);
+}
+.dq-input:focus-visible,
+.dq-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.dq-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 12px;
+  /* ▶ カーソルがはみ出して隠れないよう左に余白 */
+  padding-left: 14px;
+}
+
+.dq-progress {
+  width: 100%;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 12px;
+  border: none;
+  padding: 0;
+}
+.field legend {
+  margin-bottom: 4px;
+}
+.radio {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.radio input {
+  accent-color: var(--accent);
+}
+
+.tag {
+  display: inline-block;
+  font-size: 0.75rem;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 0 6px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.tag-win {
+  border-color: var(--win);
+  color: var(--win);
+}
+
+.notice {
+  border: 2px dashed currentColor;
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  margin: 0 0 var(--gap);
+}
+ul.notice {
+  padding-left: 28px;
+}
+ul.plain {
+  padding-left: 20px;
   margin: 0;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+.blink {
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .blink,
+  .dq-btn::before {
+    animation: none !important;
+  }
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
+/* --- モンスターカード ------------------------------------------------------ */
+.cards {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.cards-compact {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  margin: 8px 0;
+}
+.monster-card {
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.monster-card.is-picked {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.monster-card.is-winner {
+  border-color: var(--win);
+  box-shadow: 0 0 0 1px var(--win);
+}
+.monster-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.monster-slot {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+.monster-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.monster-odds {
+  font-family: var(--mono);
+  font-size: 1.6rem;
+  color: var(--accent);
+  line-height: 1.2;
+}
+.cards-compact .monster-odds {
+  font-size: 1.1rem;
+}
+.monster-prob {
+  font-family: var(--mono);
+}
+.monster-stats {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 0 8px;
+  margin: 4px 0;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+}
+.monster-stats dt {
+  color: var(--muted);
+}
+.monster-stats dd {
+  margin: 0;
+}
+.monster-line {
+  font-size: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.monster-line .label,
+.prediction .label {
+  color: var(--muted);
+}
+.struck {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.monster-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 6px;
+  padding-left: 14px;
+}
+.monster-actions .dq-btn-primary {
+  flex: 1;
+}
+
+/* --- 結果 ---------------------------------------------------------------- */
+.result-summary {
+  font-family: var(--mono);
+}
+.result-label {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+}
+.result-win {
+  color: var(--win);
+}
+.result-lose {
+  color: var(--lose);
+}
+.result-draw {
+  color: var(--draw);
+}
+.result-delta {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.result-gold {
+  font-size: 1.1rem;
+}
+
+.prediction {
+  margin-top: 8px;
+}
+.prediction-line {
+  font-family: var(--mono);
+}
+.prediction-pick {
+  color: var(--accent);
+  font-weight: 700;
+}
+.prediction-reason {
+  overflow-wrap: anywhere;
+}
+
+/* --- テーブル ------------------------------------------------------------- */
+.dq-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+}
+.dq-table th,
+.dq-table td {
+  border-bottom: 1px solid #333;
   padding: 4px 8px;
-  background: var(--code-bg);
+  text-align: left;
+  white-space: nowrap;
+}
+.dq-table thead th {
+  color: var(--muted);
+  font-weight: 400;
+}
+.dq-table tr.is-winner td,
+.dq-table tr.is-winner th {
+  color: var(--win);
+}
+.dq-table td.diag {
+  font-weight: 800;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  font-family: var(--mono);
+  margin: 0;
+}
+.stats-grid dt {
+  color: var(--muted);
+}
+.stats-grid dd {
+  margin: 0;
+}
+
+/* --- 履歴 ---------------------------------------------------------------- */
+.history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.history-row {
+  font: inherit;
+  font-family: var(--mono);
+  color: var(--fg);
+  background: none;
+  border: none;
+  border-bottom: 1px solid #222;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 4.5em 3.5em minmax(0, 1fr) 4em 6.5em auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 4px;
+  text-align: left;
+  cursor: pointer;
+}
+.history-row:hover,
+.history-row:focus-visible {
+  background: #1b1b3a;
+  outline: none;
+}
+.history-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.history-delta {
+  text-align: right;
+}
+
+/* --- ログ ---------------------------------------------------------------- */
+.battle-log-body {
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 8px;
+}
+.log-turn {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0 0 8px;
+  border-bottom: 1px dotted #333;
+}
+.log-turn.is-current {
+  background: #10102a;
+}
+.log-entry {
+  display: flex;
+  flex-direction: column;
+  padding: 1px 0;
+}
+.log-turn-start .log-simple {
+  color: var(--muted);
+}
+.log-battle-end .log-simple {
+  color: var(--accent);
+  font-weight: 700;
+}
+.log-kind {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+.log-kv {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: #9fd3ff;
+  overflow-wrap: anywhere;
+  padding-left: 1em;
+}
+.log-internal {
+  color: #c9a6ff;
+}
+.replay-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* --- モーダル ------------------------------------------------------------- */
+.dq-modal {
+  width: min(560px, calc(100vw - 24px));
+  max-height: calc(100svh - 24px);
+  overflow: auto;
+  padding: 14px 16px;
+}
+.dq-modal-wide {
+  width: min(900px, calc(100vw - 24px));
+}
+.dq-modal::backdrop {
+  background: rgba(0, 0, 20, 0.7);
+}
+.dq-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.dq-confirm {
+  margin: 8px 0;
+}
+.details-actions {
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+/* --- フォーム ------------------------------------------------------------- */
+.start-form {
+  display: flex;
+  flex-direction: column;
+}
+.autoplay-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  margin: 6px 0;
+}
+.analysis-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.analysis-offer {
+  font-family: var(--mono);
+  padding: 6px 0;
+  overflow-wrap: anywhere;
+}
+.apikey-form {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 560px) {
+  #root {
+    padding: 8px 10px 24px;
+  }
+  .dq-window {
+    padding: 12px;
+  }
+  .app-tabs .dq-tab {
+    flex: 1 1 18%;
+    padding: 4px 4px;
+    font-size: 0.85rem;
+  }
+  .history-row {
+    grid-template-columns: 3.8em 3.2em minmax(0, 1fr) 5.5em;
+    font-size: 0.85rem;
+  }
+  /* 狭い画面ではオッズ・タグ列を落として名前と増減を優先する */
+  .history-odds,
+  .history-row .tag {
+    display: none;
+  }
+  .result-label {
+    font-size: 1.6rem;
+  }
+  /* Analyst のカードは縦に長いので、スマホでは Ask Jev / Fight を先に出してスクロール往復を減らす */
+  .arena-page .jev {
+    order: -1;
+  }
 }
