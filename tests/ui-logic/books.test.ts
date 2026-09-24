@@ -187,14 +187,19 @@ describe('冒険の書の操作', () => {
     expect(store.getState().books[0].updatedAt > a.updatedAt).toBe(true)
   })
 
-  it('保存容量の目安は冊が増えると増える', () => {
-    const { store } = setup()
-    store.createBook(params)
+  it('保存容量の目安は、冊の一覧・設定・全冊の履歴の保存文字数の合計', () => {
+    const { storage, store } = setup()
+    store.updateSettings({ jevPolicy: 'max-win' })
+    store.createBook({ ...params, seed: 1 })
     store.bet(0)
-    const one = store.storageUsage()
-    store.createBook(params)
+    store.createBook({ ...params, seed: 2 })
     store.bet(0)
-    expect(store.storageUsage()).toBeGreaterThan(one)
+    // 別の冊を作ると前の冊はログを落として縮むので「冊が増えれば増える」とは限らない。実際の保存量と一致することを見る
+    const expected = storage
+      .keys()
+      .filter((k) => k !== 'dq3arena.activeSessionId')
+      .reduce((n, k) => n + (storage.getItem(k)?.length ?? 0), 0)
+    expect(store.storageUsage()).toBe(expected)
   })
 })
 
