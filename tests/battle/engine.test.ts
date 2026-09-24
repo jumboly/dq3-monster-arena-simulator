@@ -31,6 +31,10 @@ const ID = {
   agi12: FAKE_BASE + 21,
   crit: FAKE_BASE + 22,
   dodger: FAKE_BASE + 23,
+  rukanan: FAKE_BASE + 24,
+  bomios: FAKE_BASE + 25,
+  target: FAKE_BASE + 26,
+  selfHealer: FAKE_BASE + 27,
 } as const
 
 const allAttack = [1, 1, 1, 1, 1, 1, 1, 1]
@@ -59,6 +63,11 @@ const monsters = [
   fakeMonster(ID.agi12, { agility: 12 }),
   fakeMonster(ID.crit, { attack: 50, commands: [2, 2, 2, 2, 1, 1, 1, 1] }),
   fakeMonster(ID.dodger, { evasion: 7 }),
+  fakeMonster(ID.rukanan, { mp: 255, agility: 255, commands: [54, 54, 54, 54, 54, 54, 54, 54] }),
+  fakeMonster(ID.bomios, { mp: 255, agility: 255, commands: [30, 30, 30, 30, 30, 30, 30, 30] }),
+  fakeMonster(ID.target, { defense: 101, agility: 100 }),
+  // べホイミ（自身, ID 35 = j05/18/19）だけを持つ人間。最大 HP 9 なら初期 HP の抽選幅が 0 で必ず満タンから始まる
+  fakeMonster(ID.selfHealer, { mp: 255, maxHp: 9, defense: 30, selectionJudgment: 1, commands: [35, 35, 35, 35, 35, 35, 35, 35] }),
 ]
 const engine = engineWith(monsters)
 
@@ -246,21 +255,58 @@ describe('状態異常（§4.1, §6.4, §6.7）', () => {
     expect(r.finalStates[1].paralyzed).toBe(true) // U-08 暫定: 戦闘中は回復しない
   })
 
-  it('眠り中は行動せず回避もしない。カウンター 3 なら 3 ターン目の手番で起き、4 ターン目から動く（U-08）', () => {
+  it('眠り中は行動せず回避もしない。覚醒判定は 1/8, 1/3, 1/2, 1 で、4 回目の手番までに必ず起き、次のターンから動く（U-08）', () => {
     const e = engineWith(monsters, {
       prepareCombatants: (states) => {
-        states[1].sleepCounter = 3
+        states[1].sleepCounter = 1
       },
     })
-    const r = run(e, [ID.weakAttacker, ID.evader], 1, 5)
-    const own = actions(r.log).filter((a) => a.actorSlot === 1)
-    expect(own[0].turn).toBe(4)
-    const wake = r.log.find((x) => x.simple.includes('めをさました'))
-    expect(wake?.turn).toBe(3)
-    // 眠っている間（〜3 ターン目の起床まで）に賭けた選手（Group 4）の回避 rand0toA(63) を引いていない
-    const wakeAt = r.log.indexOf(wake!)
-    const before = r.log.slice(0, wakeAt)
-    expect(before.some((x) => String(x.internal?.rng ?? '').includes('rand0toA(63)'))).toBe(false)
+    const wakeTurns: number[] = []
+    for (let seed = 1; seed <= 400; seed++) {
+      const r = run(e, [ID.weakAttacker, ID.evader], 1, seed)
+      const wake = r.log.find((x) => x.simple.includes('めをさました'))
+      if (!wake) continue // 起きる前に決着した
+      wakeTurns.push(wake.turn)
+      // 行動はターン開始時に決めるので、起きたターンには動けず次のターンから動く
+      const own = actions(r.log).filter((a) => a.actorSlot === 1)
+      if (own.length > 0) expect(own[0].turn).toBe(wake.turn + 1)
+      // 眠っている間に賭けた選手（Group 4）の回避 rand0toA(63) を引いていない
+      const before = r.log.slice(0, r.log.indexOf(wake))
+      expect(before.some((x) => String(x.internal?.rng ?? '').includes('rand0toA(63)'))).toBe(false)
+    }
+    expect(Math.max(...wakeTurns)).toBeLessThanOrEqual(4)
+    // 1 回目の判定で起きる率は 1/8。400 試行の標準誤差は約 1.7% なので、広めの幅で確かめる
+    const first = wakeTurns.filter((t) => t === 1).length / wakeTurns.length
+    expect(first).toBeGreaterThan(0.05)
+    expect(first).toBeLessThan(0.2)
+  })
+})
+
+describe('能力変化（§7.5）', () => {
+  const changes = (r: BattleResult) => r.log.filter((e) => e.kind === 'status' && e.actorSlot === 0).map((e) => [e.detail?.before, e.detail?.after])
+  it('ルカナンは現在の守備力の 1/2 を下げる（重ねるほど減り方が小さくなる）', () => {
+    const r = run(engine, [ID.rukanan, ID.target], 0, 1)
+    expect(changes(r).slice(0, 3)).toEqual([
+      [101, 51],
+      [51, 26],
+      [26, 13],
+    ])
+  })
+  it('ボミオスは素早さを 0 にする', () => {
+    const r = run(engine, [ID.bomios, ID.target], 0, 1)
+    expect(changes(r)[0]).toEqual([100, 0])
+  })
+})
+
+describe('自身回復（j18/19）', () => {
+  it('HP が満タンなら選ばず、減っていれば自分にかける', () => {
+    const r = run(engine, [ID.selfHealer, ID.weakAttacker], 0, 1)
+    const own = actions(r.log).filter((a) => a.actorSlot === 0)
+    // 1 ターン目は満タンなので回復は全除外され、通常攻撃になる
+    expect(own[0].internal?.commandId).toBe('0x01')
+    const heals = own.filter((a) => a.internal?.commandId === '0x23')
+    expect(heals.length).toBeGreaterThan(0)
+    for (const h of heals) expect(h.targetSlots).toEqual([0])
   })
 })
 

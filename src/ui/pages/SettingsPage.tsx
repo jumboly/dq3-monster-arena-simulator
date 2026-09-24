@@ -47,7 +47,7 @@ export function SettingsPage() {
 
       <Window title="引き分け時の払い戻し">
         <p className="muted small">
-          引き分け（終了タイプ 7）で賭け金が返るかは実機の扱いが未解明です（U-20）。次の試合から反映されます。
+          攻略サイトの記述では、賭けた選手が生き残った引き分け（10 ターン経過）だけ賭け金が戻ります。次の試合から反映されます。
         </p>
         <fieldset className="field">
           <label className="radio">
@@ -56,7 +56,7 @@ export function SettingsPage() {
               checked={settings.drawPolicy === 'refund'}
               onChange={() => store.updateSettings({ drawPolicy: 'refund' })}
             />
-            返金 <span className="muted small">賭け金が戻る（既定）</span>
+            返金 <span className="muted small">賭けた選手が生き残ったときだけ戻る（既定）</span>
           </label>
           <label className="radio">
             <input
@@ -64,7 +64,7 @@ export function SettingsPage() {
               checked={settings.drawPolicy === 'forfeit'}
               onChange={() => store.updateSettings({ drawPolicy: 'forfeit' })}
             />
-            没収 <span className="muted small">賭け金は戻らない</span>
+            没収 <span className="muted small">引き分けでは常に戻らない</span>
           </label>
         </fieldset>
       </Window>

@@ -29,7 +29,7 @@ export interface OddsRoll {
   odds: Odds
   /** 中間生成値 v（Internal ログ・検証用） */
   intermediate: number
-  /** 暫定の境界処理（U-18）を通ったか */
+  /** 下限 1.0 への丸め（U-18）を通ったか */
   usedProvisionalBoundary: boolean
 }
 
@@ -37,15 +37,15 @@ export interface OddsRoll {
  * 表示オッズを 1 回抽選する。
  *
  * v >= 0 のとき「整数部 = B + Q, 小数部 = R」は dqbook の文言どおり（Likely）。
- * v < 0・剰余 0・和 <= 0 の実機の境界処理は未公開（Unknown, U-18）。暫定として
- * 小数 1 桁を整数で持つ odds10 = 10B + v を採り、下限 1.0 に丸める。v < 0 で
- * 10B + v を使うのは数学的に自然な解釈だからで、実機が別の扱いをする可能性は残る。
+ * v < 0 は小数 1 桁を整数で持つ odds10 = 10B + v とし、下限 1.0 に丸める。dqwiz・RP2nd の
+ * 観測範囲（B=4 で 3.7〜4.3、B=1 で 1.0〜1.3、平均 1.06）と一致する（Likely。
+ * docs/research/fidelity-review.md #18）。
  */
 export function rollOdds(base: number, rng: RandomSource): OddsRoll {
   const k = oddsSpread(base)
   const v = randInclusive(rng, 0, 2 * k) - k
   let odds10 = 10 * base + v
-  let usedProvisionalBoundary = v < 0
+  let usedProvisionalBoundary = false
   if (odds10 < 10) {
     odds10 = 10
     usedProvisionalBoundary = true

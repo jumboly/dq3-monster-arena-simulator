@@ -47,13 +47,13 @@ describe('odds', () => {
     expect(r.usedProvisionalBoundary).toBe(false)
   })
 
-  it('v < 0 は暫定の 10B + v（U-18）として記録される', () => {
+  it('v < 0 は 10B + v。丸めていないので下限処理としては記録しない（U-18）', () => {
     const r = rollOdds(4, fixed([0])) // v = -3
     expect(r.odds).toEqual({ integer: 3, tenths: 7 })
-    expect(r.usedProvisionalBoundary).toBe(true)
+    expect(r.usedProvisionalBoundary).toBe(false)
   })
 
-  it('下限は 1.0 に丸める（暫定）', () => {
+  it('下限は 1.0 に丸める', () => {
     const r = rollOdds(1, fixed([0])) // 10 - 3 = 7 → 10
     expect(oddsTimesTen(r.odds)).toBe(10)
     expect(r.usedProvisionalBoundary).toBe(true)
@@ -111,6 +111,11 @@ describe('payout', () => {
     const draw: BattleOutcome = { kind: 'draw', reason: 'turn-limit', turn: 10, endType: 7 }
     expect(settle({ stake: 300, odds, outcome: draw, betSlot: 1, drawPolicy: 'refund' }).delta).toBe(0)
     expect(settle({ stake: 300, odds, outcome: draw, betSlot: 1, drawPolicy: 'forfeit' }).delta).toBe(-300)
+  })
+  it('生存 0 体の引き分けは賭けた選手も倒れているので、返金方針でも没収', () => {
+    const draw: BattleOutcome = { kind: 'draw', reason: 'all-inactive', turn: 4, endType: 7 }
+    const s = settle({ stake: 300, odds, outcome: draw, betSlot: 1, drawPolicy: 'refund' })
+    expect(s).toEqual({ won: false, draw: true, payout: 0, delta: -300 })
   })
 })
 

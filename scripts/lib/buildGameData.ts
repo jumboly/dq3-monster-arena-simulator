@@ -168,7 +168,7 @@ function parseCommand(t: DqbookTable, row: DqbookTable['rows'][number]): ParsedC
 function parseMonster(
   t: DqbookTable,
   row: DqbookTable['rows'][number],
-  resolveCommand: (label: string, context: string) => number,
+  resolveCommand: (label: string, context: string, monster: string) => number,
 ): MonsterDef {
   const name = row.get('名前')
   return {
@@ -184,7 +184,7 @@ function parseMonster(
     mp: readDec(t, row, 'MP', 255),
     maxHp: readDec(t, row, 'HP', 0xffff),
     commands: range(8).map((k) =>
-      resolveCommand(row.get(`コマンド ${k}`), `${t.file}:${row.line} ${name} [コマンド ${k}]`),
+      resolveCommand(row.get(`コマンド ${k}`), `${t.file}:${row.line} ${name} [コマンド ${k}]`, name),
     ),
     commandConstraints: range(8).map((k) => readBool(t, row, `コマンド制約 ${k}`)),
     selectionJudgment: readDec(t, row, 'コマンド選択判断', 3), // #$1C & #$30

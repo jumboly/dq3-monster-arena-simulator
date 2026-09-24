@@ -134,10 +134,12 @@ export function evasionParams(evasion: number, targetGroup: number): { num: numb
 }
 
 /**
- * 耐性値 → 成功閾値（/256）。U-13 暫定: [256, 192, 76, 0]。
- * 0/2/3 は RGH-MOD-011 の分岐定数（#$0100 / #$004C / #$0000, Likely）、1 は未確認（75% 説を採用）。
+ * 耐性値 → 成功閾値（/256）: [256, 180, 76, 0]。
+ * 0/2/3 は RGH-MOD-011 の分岐定数（#$0100 / #$004C / #$0000, Likely）。
+ * 1 は RGH-MOD-011 本文と gcgx が 70% としており（RGH-025 の表だけ 75%）、耐性 2 の 76 と対称な 256 - 76 を採る
+ * （値そのものは推測。fidelity-review.md #13）。
  */
-export const RESISTANCE_P256: readonly number[] = [256, 192, 76, 0]
+export const RESISTANCE_P256: readonly number[] = [256, 180, 76, 0]
 
 /**
  * 系統分類 → モンスター耐性番号。battle-spec §7.3 の表（RGH-025, Likely）。
