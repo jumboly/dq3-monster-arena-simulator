@@ -35,6 +35,8 @@ export function deriveSeed(sessionSeed: number, round: number, salt: 'offer' | '
 }
 
 export interface NewSessionParams {
+  /** 冒険の書の名前。省略時は空（一覧側で「冒険の書 N」を補う） */
+  name?: string
   heroLevel: number
   initialGold: number
   informationMode: InformationMode
@@ -48,12 +50,19 @@ export function clampHeroLevel(n: number): number {
   return Math.min(HERO_LEVEL_MAX, Math.max(HERO_LEVEL_MIN, Math.round(n)))
 }
 
+export function newSessionId(seed: number, now: Date): string {
+  // 「同じ試合順で はじめから」うつすと seed と作成時刻が一致しうるので、乱数で衝突を避ける
+  return `${now.getTime().toString(36)}-${seed.toString(36)}-${randomSeed().toString(36).slice(0, 4)}`
+}
+
 export function createSession(p: NewSessionParams): Session {
   const seed = p.seed ?? randomSeed()
   const now = p.now ?? new Date()
   return {
-    id: `${now.getTime().toString(36)}-${seed.toString(36)}`,
+    id: newSessionId(seed, now),
+    name: p.name?.trim() ?? '',
     createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
     heroLevel: clampHeroLevel(p.heroLevel),
     initialGold: Math.max(0, Math.floor(p.initialGold)),
     gold: Math.max(0, Math.floor(p.initialGold)),

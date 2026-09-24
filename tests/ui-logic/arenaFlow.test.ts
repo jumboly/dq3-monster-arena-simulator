@@ -113,7 +113,7 @@ describe('ArenaStore', () => {
   it('賭けるたびに session と history を永続化し、再読込で復元する', () => {
     const storage = new MemoryStorage()
     const store = new ArenaStore(game, createStores(storage))
-    store.startSession({ heroLevel: 30, initialGold: 10000, informationMode: 'classic', playerMode: 'human', seed: 5 })
+    store.createBook({ heroLevel: 30, initialGold: 10000, informationMode: 'classic', playerMode: 'human', seed: 5 })
     store.bet(0)
     store.next()
     store.bet(1)
@@ -128,12 +128,12 @@ describe('export', () => {
     const storage = new MemoryStorage()
     storage.setItem('dq3arena.aiGatewayApiKey', 'vck_secret_key_value')
     const store = new ArenaStore(game, createStores(storage))
-    store.startSession({ heroLevel: 30, initialGold: 10000, informationMode: 'classic', playerMode: 'human', seed: 5 })
+    store.createBook({ heroLevel: 30, initialGold: 10000, informationMode: 'classic', playerMode: 'human', seed: 5 })
     store.bet(0)
     const { session, history } = store.getState()
     // 設定オブジェクトに余計なフィールドが紛れ込んでも出力されないこと
     const settings = { ...store.getState().settings, apiKey: 'vck_secret_key_value' } as never
-    const json = JSON.stringify(buildExport({ session, history, settings }))
+    const json = JSON.stringify(buildExport({ books: [{ session: session!, history }], settings }))
     expect(json).not.toContain('vck_secret')
     expect(json).not.toContain('apiKey')
   })
@@ -142,7 +142,7 @@ describe('export', () => {
 describe('runAutoPlay', () => {
   const setup = (gold = 10000) => {
     const store = new ArenaStore(game, createStores(new MemoryStorage()))
-    store.startSession({ heroLevel: 30, initialGold: gold, informationMode: 'analyst', playerMode: 'jev', seed: 11 })
+    store.createBook({ heroLevel: 30, initialGold: gold, informationMode: 'analyst', playerMode: 'jev', seed: 11 })
     return store
   }
   const noSleep = async () => {}

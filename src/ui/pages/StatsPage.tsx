@@ -7,33 +7,40 @@ import {
   topPickAccuracy,
 } from '../../core/stats/sessionStats'
 import { Window } from '../components/Window'
-import { useArenaState } from '../hooks/arenaContext'
+import { useArenaDeps, useArenaState } from '../hooks/arenaContext'
 import { toStatRecord } from '../logic/arenaFlow'
-import { buildExport } from '../logic/exportData'
+import { compareBook, sortBooks } from '../logic/books'
+import { buildExport, type ExportBook } from '../logic/exportData'
 import { formatGold, formatPercent, formatSignedGold } from '../logic/format'
 
+function download(payload: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  // クリック直後に revoke すると一部ブラウザでダウンロードが始まらないため少し遅らせる
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 export function StatsPage() {
-  const { session, history, settings } = useArenaState()
+  const { store } = useArenaDeps()
+  const { session, history, settings, books } = useArenaState()
   const records = useMemo(() => history.map(toStatRecord), [history])
   const predicted = useMemo(() => records.filter((r) => r.probabilities), [records])
 
-  if (!session) return <p className="muted">セッションがありません。</p>
+  if (!session) return <p className="muted">冒険の書が選ばれていません。</p>
   const s = computeSessionStats(records, session.initialGold, session.gold)
   const brier = brierScore(predicted)
   const top = topPickAccuracy(predicted)
   const selfEv = meanSelfExpectedReturn(predicted)
   const bins = calibrationBins(predicted).filter((b) => b.count > 0)
 
-  const exportJson = () => {
-    const payload = buildExport({ session, history, settings })
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `dq3-arena-${session.id}.json`
-    a.click()
-    // クリック直後に revoke すると一部ブラウザでダウンロードが始まらないため少し遅らせる
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  const exportThis = () => download(buildExport({ books: [{ session, history }], settings }), `dq3-arena-${session.id}.json`)
+  const exportAll = () => {
+    const all: ExportBook[] = sortBooks(books).map((b) => ({ session: b, history: store.historyOf(b.id) }))
+    download(buildExport({ books: all, settings }), `dq3-arena-all-${new Date().toISOString().slice(0, 10)}.json`)
   }
 
   return (
@@ -109,12 +116,75 @@ export function StatsPage() {
         )}
       </Window>
 
+      {books.length > 1 && <BookComparison />}
+
       <Window title="Export">
-        <p className="muted small">設定・セッション・履歴を JSON で保存します。API キーは含まれません。</p>
-        <button type="button" className="dq-btn" onClick={exportJson}>
-          JSON をダウンロード
-        </button>
+        <p className="muted small">設定と冒険の書（履歴を含む）を JSON で保存します。API キーは含まれません。</p>
+        <div className="dq-actions">
+          <button type="button" className="dq-btn" onClick={exportThis}>
+            この冒険の書だけ
+          </button>
+          <button type="button" className="dq-btn" onClick={exportAll} disabled={books.length < 2}>
+            すべての冒険の書（{books.length} 冊）
+          </button>
+        </div>
       </Window>
     </div>
+  )
+}
+
+/**
+ * 冒険の書どうしの比較。「同じ試合順で はじめから」うつした冊を並べ、Jev の設定やモードの違いを見比べるため。
+ * 他の冊の履歴はこの表を出す時にだけ読む（一覧のためだけに全冊を常時メモリに載せない）。
+ */
+function BookComparison() {
+  const { store } = useArenaDeps()
+  const { books, session, history } = useArenaState()
+  // 遊んでいる冊の history が変われば再集計する。他の冊は切替時にしか変わらないので books で十分
+  const rows = useMemo(
+    () => sortBooks(books).map((b) => compareBook(b, b.id === session?.id ? history : store.historyOf(b.id))),
+    [books, session?.id, history, store],
+  )
+
+  return (
+    <Window title="冒険の書どうしの比較">
+      <div className="table-scroll">
+        <table className="dq-table compare-table">
+          <thead>
+            <tr>
+              <th>冒険の書</th>
+              <th>モード</th>
+              <th>試合</th>
+              <th>勝率</th>
+              <th>収支</th>
+              <th>ROI</th>
+              <th title="予測付き試合のみ。0 が最良">Brier</th>
+              <th title="予測確率が最大の選手が勝った割合">本命的中</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.session.id} className={r.session.id === session?.id ? 'is-current' : undefined}>
+                <th scope="row">{r.session.name}</th>
+                <td className="nowrap">
+                  {r.session.informationMode === 'analyst' ? 'Analyst' : 'Classic'} / {r.session.playerMode === 'jev' ? 'Jev' : 'Human'}
+                </td>
+                <td className="num">{r.stats.matches}</td>
+                <td className="num">{formatPercent(r.stats.winRate)}</td>
+                <td className={`num ${r.stats.profit >= 0 ? 'plus' : 'minus'}`}>{formatSignedGold(r.stats.profit)}</td>
+                <td className="num">{formatPercent(r.stats.roi)}</td>
+                <td className="num" title={`予測付き ${r.predicted} 試合`}>
+                  {r.brier === null ? '—' : r.brier.toFixed(3)}
+                </td>
+                <td className="num">{formatPercent(r.topPick)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted small">
+        収支は現在の所持金 − 初期所持金。「同じ試合順で はじめから」うつした冊どうしなら、同じ試合番号には同じ組み合わせが出ます。
+      </p>
+    </Window>
   )
 }

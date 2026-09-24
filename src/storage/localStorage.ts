@@ -41,6 +41,8 @@ export interface VersionedStore<T> {
   load(): T | null
   save(data: T): SaveResult
   clear(): void
+  /** 保存されている文字列の長さ（無ければ 0）。容量の目安表示に使う */
+  size(): number
 }
 
 /** window が無い環境（Vitest の node 環境・SSR）や、アクセス自体が例外になる環境でも安全に取得する */
@@ -104,6 +106,13 @@ export function createVersionedStore<T>(opts: VersionedStoreOptions<T>): Version
         storage()?.removeItem(fullKey)
       } catch {
         // 削除失敗は致命的ではない（次回 load で validate に弾かれるか、上書きされる）
+      }
+    },
+    size() {
+      try {
+        return storage()?.getItem(fullKey)?.length ?? 0
+      } catch {
+        return 0
       }
     },
   }

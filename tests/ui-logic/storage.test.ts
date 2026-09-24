@@ -125,10 +125,10 @@ describe('history retention', () => {
     const bare = JSON.stringify({ v: 1, data: trimHistory(h, 0) }).length
     const storage = new MemoryStorage(bare + 3000)
     const stores = createStores(storage)
-    const { result, saved } = saveHistory(stores, h)
+    const { result, saved } = saveHistory(stores.historyOf("s"), h)
     expect(result.ok).toBe(true)
     expect(saved.filter((e) => e.battle).length).toBeLessThan(30)
-    expect(stores.history.load()).toHaveLength(40)
+    expect(stores.historyOf("s").load()).toHaveLength(40)
   })
 
   it('設定は欠けた項目を既定値で埋める', () => {
