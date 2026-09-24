@@ -81,10 +81,10 @@ export interface HistoryEntry {
   goldBefore: number
   goldAfter: number
   battleSeed: number
-  /** ROM の終了タイプ 5 当たり / 6 ハズレ / 7 引き分け（旧データには無い） */
-  endType?: ArenaEndType
+  /** ROM の終了タイプ 5 当たり / 6 ハズレ / 7 引き分け */
+  endType: ArenaEndType
   /** 引き分けの払い戻し前提。実機未解明（U-20）で設定により変わるため、当時の前提を残す */
-  drawPolicy?: DrawPolicy
+  drawPolicy: DrawPolicy
   summary: BattleSummary
   /** 直近 LOG_RETENTION 件だけ保持。古いものは undefined（resolveBet で再生成可能） */
   battle?: BattleResult
@@ -118,10 +118,7 @@ function isObj(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null
 }
 
-/** 冒険の書導入前（name / updatedAt なし）の Session。旧キーからの移行でだけ使う */
-export type LegacySession = Omit<Session, 'name' | 'updatedAt'>
-
-export function isLegacySession(x: unknown): x is LegacySession {
+export function isSession(x: unknown): x is Session {
   return (
     isObj(x) &&
     typeof x.id === 'string' &&
@@ -132,12 +129,10 @@ export function isLegacySession(x: unknown): x is LegacySession {
     typeof x.seed === 'number' &&
     (x.informationMode === 'classic' || x.informationMode === 'analyst') &&
     (x.playerMode === 'human' || x.playerMode === 'jev') &&
-    (x.phase === 'match' || x.phase === 'result')
+    (x.phase === 'match' || x.phase === 'result') &&
+    typeof x.name === 'string' &&
+    typeof x.updatedAt === 'string'
   )
-}
-
-export function isSession(x: unknown): x is Session {
-  return isLegacySession(x) && typeof (x as Session).name === 'string' && typeof (x as Session).updatedAt === 'string'
 }
 
 function isSessionList(x: unknown): x is Session[] {
@@ -190,61 +185,10 @@ export function createStores(storage?: KeyValueStorage) {
       validate: isSettings,
       storage,
     }),
-    /** 冒険の書導入前の単一セッション用キー。移行（migrateLegacyStorage）でだけ読む */
-    legacy: {
-      session: createVersionedStore<LegacySession>({ key: 'session', version: 1, validate: isLegacySession, storage }),
-      history: createVersionedStore<HistoryEntry[]>({ key: 'history', version: 1, validate: isHistory, storage }),
-    },
   }
 }
 
 export type Stores = ReturnType<typeof createStores>
-
-export const LEGACY_BOOK_NAME = '冒険の書 1'
-
-export type MigrationResult =
-  | { status: 'none' }
-  | { status: 'migrated'; session: Session }
-  | { status: 'failed'; result: SaveResult }
-
-/**
- * 旧キー（session / history）の単一セッションを「冒険の書 1」として新形式へ移す。
- *
- * 旧キーは新キーへの保存がすべて成功してから消す。途中で失敗しても旧データは残り、
- * 次回起動時に再試行される。履歴は数 MB になりうるので、旧キーを残したまま複製すると
- * それだけで容量超過する。そこで旧履歴はメモリに読んでから一旦消し、新キーへの保存に
- * 失敗したら同じ内容を書き戻す（元々収まっていた大きさなので書き戻しは成功する）。
- */
-export function migrateLegacyStorage(stores: Stores): MigrationResult {
-  const legacy = stores.legacy.session.load()
-  // 新形式が既にあるなら、残った旧キーは移行済みの消し損ねとみなして触らない（上書き事故を防ぐ）
-  if (!legacy || stores.sessions.load() !== null) return { status: 'none' }
-
-  const legacyHistory = stores.legacy.history.load() ?? []
-  const history = legacyHistory.filter((h) => h.sessionId === legacy.id)
-  const session: Session = {
-    ...legacy,
-    name: LEGACY_BOOK_NAME,
-    updatedAt: history[history.length - 1]?.playedAt ?? legacy.createdAt,
-  }
-
-  stores.legacy.history.clear()
-  const { result: hr } = saveHistory(stores.historyOf(session.id), history)
-  if (!hr.ok) {
-    stores.legacy.history.save(legacyHistory)
-    return { status: 'failed', result: hr }
-  }
-  const sr = stores.sessions.save([session])
-  if (!sr.ok) {
-    stores.historyOf(session.id).clear()
-    stores.legacy.history.save(legacyHistory)
-    return { status: 'failed', result: sr }
-  }
-  // activeSessionId の保存失敗は致命的ではない（一覧から選び直せる）ので結果を見ない
-  stores.activeSessionId.save(session.id)
-  stores.legacy.session.clear()
-  return { status: 'migrated', session }
-}
 
 export function loadSettings(stores: Stores): Settings {
   // 項目追加時に古い保存値で欠けたフィールドを既定値で埋めるため spread する

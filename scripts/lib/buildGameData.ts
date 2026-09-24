@@ -1,8 +1,8 @@
 /**
  * vendor/dqbook の txt 群から GameData を組み立てる純粋な変換。
  *
- * ファイル書き出しと分離しているのは、生成スクリプト（build-data.ts）と
- * 検証・一覧スクリプト（list-effective-commands.ts）が同じ変換結果を共有するため。
+ * ファイル書き出しと分離しているのは、生成スクリプト（build-data.ts）とテストが
+ * 同じ変換結果を共有するため。
  * 値の変換規則は dqbook/book/dq3_{monsters,commands,damage,matchmake}.xml の構造体表に従う。
  */
 import { readFileSync } from 'node:fs'

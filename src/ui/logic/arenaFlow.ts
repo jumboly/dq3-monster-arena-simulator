@@ -140,8 +140,7 @@ export function battleFor(game: ArenaGame, e: HistoryEntry): { result: ArenaRoun
         won: e.won,
         draw: e.battle.outcome.kind === 'draw',
         endType: e.battle.outcome.endType,
-        // 旧データには drawPolicy が無いので、払い戻し額から逆算する
-        drawPolicy: e.drawPolicy ?? (e.battle.outcome.kind === 'draw' && e.payout === 0 ? 'forfeit' : 'refund'),
+        drawPolicy: e.drawPolicy,
         payout: e.payout,
         delta: e.delta,
         goldBefore: e.goldBefore,

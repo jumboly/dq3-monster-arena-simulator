@@ -8,13 +8,14 @@ const gw = (kind: AiGatewayError['kind'], retryAfterMs: number | null = null) =>
 
 describe('runAutoPlay', () => {
   it('上限回数まで回す', async () => {
-    const r = await runAutoPlay({ maxRounds: 5, playRound: async ({ round }) => ({ value: round }), sleep: sleepSpy() })
+    const rounds: number[] = []
+    const r = await runAutoPlay({ maxRounds: 5, playRound: async ({ round }) => (rounds.push(round), {}), sleep: sleepSpy() })
     expect(r.stopReason).toBe('max_rounds')
-    expect(r.values).toEqual([0, 1, 2, 3, 4])
+    expect(rounds).toEqual([0, 1, 2, 3, 4])
   })
 
   it('上限は 1000 回に切り詰める', async () => {
-    const play = vi.fn(async () => ({ value: 1 }))
+    const play = vi.fn(async () => ({}))
     const r = await runAutoPlay({ maxRounds: 5000, playRound: play, sleep: sleepSpy() })
     expect(r.roundsCompleted).toBe(AUTO_PLAY_MAX_ROUNDS)
     expect(play).toHaveBeenCalledTimes(1000)
@@ -27,7 +28,7 @@ describe('runAutoPlay', () => {
       signal: c.signal,
       playRound: async ({ round }) => {
         if (round === 2) c.abort()
-        return { value: round }
+        return {}
       },
     })
     expect(r.stopReason).toBe('aborted')
@@ -57,12 +58,11 @@ describe('runAutoPlay', () => {
       playRound: async ({ round, attempt }) => {
         rounds.push([round, attempt])
         if (script[i++] === 'fail') throw gw('server')
-        return { value: round }
+        return {}
       },
     })
     expect(r.stopReason).toBe('consecutive_failures')
     expect(r.roundsCompleted).toBe(2)
-    expect(r.totalFailures).toBe(5)
     expect(rounds.slice(0, 4)).toEqual([[0, 1], [1, 1], [1, 2], [1, 3]])
   })
 
@@ -73,30 +73,30 @@ describe('runAutoPlay', () => {
       maxRounds: 2,
       sleep,
       maxRateLimitWaitMs: 90_000,
-      playRound: async ({ round }) => {
+      playRound: async () => {
         n++
         if (n === 1) throw gw('rate_limit', 50_000)
         if (n === 2) throw gw('rate_limit', 999_000)
         if (n === 3) throw gw('rate_limit', null)
-        return { value: round }
+        return {}
       },
       maxConsecutiveFailures: 5,
     })
     expect(r.stopReason).toBe('max_rounds')
-    expect(r.rateLimitWaits).toBe(3)
     expect(sleep.mock.calls.map((c) => c[0])).toEqual([50_000, 90_000, 60_000])
   })
 
   it('auth / invalid は待っても直らないので即停止', async () => {
     for (const kind of ['auth', 'invalid'] as const) {
-      const r = await runAutoPlay({ maxRounds: 10, sleep: sleepSpy(), playRound: async () => { throw gw(kind) } })
+      const play = vi.fn(async () => { throw gw(kind) })
+      const r = await runAutoPlay({ maxRounds: 10, sleep: sleepSpy(), playRound: play })
       expect(r.stopReason).toBe('fatal_error')
-      expect(r.totalFailures).toBe(1)
+      expect(play).toHaveBeenCalledTimes(1)
     }
   })
 
   it('playRound が stop を返したら終了（所持金不足など）', async () => {
-    const r = await runAutoPlay({ maxRounds: 10, playRound: async ({ round }) => ({ value: round, stop: round === 1 }) })
+    const r = await runAutoPlay({ maxRounds: 10, playRound: async ({ round }) => ({ stop: round === 1 }) })
     expect(r.stopReason).toBe('requested')
     expect(r.roundsCompleted).toBe(2)
   })
@@ -110,7 +110,7 @@ describe('runAutoPlay', () => {
       onEvent: (e) => events.push(e.type),
       playRound: async () => {
         if (n++ === 0) throw gw('server')
-        return { value: 0 }
+        return {}
       },
     })
     expect(events).toEqual(['round_failed', 'waiting', 'round_completed'])

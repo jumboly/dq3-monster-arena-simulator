@@ -12,7 +12,6 @@ export const EMPTY_COMMAND_ID = 0xa4
 
 /** 行動対象エンコード（battle-spec §5.1, Likely） */
 export const TARGET_GROUP_FLAG = 0x20
-export const TARGET_MULTI_FLAG = 0x40
 /** 判断ルーチン失敗時の「空」 */
 export const TARGET_EMPTY = 0x40
 /** 全体攻撃（敵陣すべて） */

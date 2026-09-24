@@ -21,34 +21,13 @@ export type FetchLike = (input: string, init: RequestInit) => Promise<Response>
 
 export interface VercelGatewayClientOptions {
   fetch?: FetchLike
-  endpoint?: string
-  model?: string
   /** 試行回数の上限（初回を含む）。別プロジェクトの実測で 503 の連続を 6 回で抜けられた */
   maxAttempts?: number
-  /** 試行 n 回目の失敗後の待ち（ms）。上流の不調は数百 ms で解けることがあるので短く刻む */
-  backoffMs?: readonly number[]
   /** 1 試行のタイムアウト。Jev は通常 1 秒前後で返るので 30 秒は障害判定用 */
   timeoutMs?: number
-  /**
-   * Retry-After がこれより長ければ待たずに rate_limit で返す。
-   * なぜ: 429 の Retry-After は約 50 秒で、クライアント内で 5 回待つと数分固まる。
-   * 長い待機は AbortSignal と進捗表示を持つ呼び出し側（autoPlay）に任せる。
-   */
-  maxRetryAfterMs?: number
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
   random?: () => number
   now?: () => number
-  /** 試行ごとの観測（キーは含まない）。レイテンシ計測・デバッグ用 */
-  onAttempt?: (info: AttemptInfo) => void
-}
-
-export interface AttemptInfo {
-  attempt: number
-  status: number | null
-  kind: AiFailureKind | null
-  latencyMs: number
-  waitMs: number | null
-  generationId: string | null
 }
 
 export interface EvaluateResult extends EvaluateEnvelope {
@@ -57,8 +36,6 @@ export interface EvaluateResult extends EvaluateEnvelope {
   elapsedMs: number
   /** 成功した試行だけの往復時間 */
   latencyMs: number
-  /** 保存・調査用の生応答（キーは含まれない：リクエストヘッダは載せていないため） */
-  raw: unknown
   /** 実際のリクエストとレスポンス（表示用。Authorization は伏せ字） */
   exchange: AgentExchange
 }
@@ -70,10 +47,17 @@ export interface EvaluateOptions {
 
 const DEFAULTS = {
   maxAttempts: 6,
-  backoffMs: [300, 700, 1500, 3000, 6000] as readonly number[],
   timeoutMs: 30_000,
-  maxRetryAfterMs: 10_000,
 }
+
+/** 試行 n 回目の失敗後の待ち（ms）。上流の不調は数百 ms で解けることがあるので短く刻む */
+const BACKOFF_MS = [300, 700, 1500, 3000, 6000]
+/**
+ * Retry-After がこれより長ければ待たずに rate_limit で返す。
+ * なぜ: 429 の Retry-After は約 50 秒で、クライアント内で 5 回待つと数分固まる。
+ * 長い待機は AbortSignal と進捗表示を持つ呼び出し側（autoPlay）に任せる。
+ */
+const MAX_RETRY_AFTER_MS = 10_000
 
 const DETAIL_MAX = 200
 /** JSON でない応答本文（HTML のエラーページ等）を表示用に残す上限 */
@@ -135,34 +119,20 @@ function generationIdOf(parsed: unknown): string | null {
 
 export class VercelGatewayClient {
   private readonly fetchImpl: FetchLike
-  private readonly endpoint: string
-  private readonly model: string
   private readonly maxAttempts: number
-  private readonly backoffMs: readonly number[]
   private readonly timeoutMs: number
-  private readonly maxRetryAfterMs: number
   private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>
   private readonly random: () => number
   private readonly now: () => number
-  private readonly onAttempt?: (info: AttemptInfo) => void
 
   constructor(options: VercelGatewayClientOptions = {}) {
     // globalThis.fetch をそのまま保持すると、ブラウザでは this 束縛が外れて Illegal invocation になる
     this.fetchImpl = options.fetch ?? ((input, init) => globalThis.fetch(input, init))
-    this.endpoint = options.endpoint ?? JEV_ENDPOINT
-    this.model = options.model ?? JEV_MODEL_ID
     this.maxAttempts = Math.max(1, options.maxAttempts ?? DEFAULTS.maxAttempts)
-    this.backoffMs = options.backoffMs ?? DEFAULTS.backoffMs
     this.timeoutMs = options.timeoutMs ?? DEFAULTS.timeoutMs
-    this.maxRetryAfterMs = options.maxRetryAfterMs ?? DEFAULTS.maxRetryAfterMs
     this.sleep = options.sleep ?? defaultSleep
     this.random = options.random ?? Math.random
     this.now = options.now ?? (() => Date.now())
-    this.onAttempt = options.onAttempt
-  }
-
-  get modelId(): string {
-    return this.model
   }
 
   async evaluate(request: JevEvaluateRequest, { apiKey, signal }: EvaluateOptions): Promise<EvaluateResult> {
@@ -170,12 +140,12 @@ export class VercelGatewayClient {
       throw new AiGatewayError({ kind: 'auth', status: null, attempts: 0, elapsedMs: 0, detail: 'API キーが未設定です' })
     }
     const key = apiKey.trim()
-    const body = JSON.stringify({ model: this.model, state: request.state, questions: request.questions })
+    const body = JSON.stringify({ model: JEV_MODEL_ID, state: request.state, questions: request.questions })
     const startedAll = this.now()
     const redact = (s: string) => truncate(redactSecrets(s, [key]))
     // 表示用のやり取り。本文は送ったものそのまま（キーは本文に入らない）、ヘッダだけ伏せ字にする
     const exchangeOf = (status: number | null, parsed: unknown, text: string, attempt: number, latencyMs: number | null): AgentExchange => ({
-      endpoint: this.endpoint,
+      endpoint: JEV_ENDPOINT,
       method: 'POST',
       requestHeaders: { Authorization: 'Bearer [REDACTED]', 'Content-Type': 'application/json' },
       requestBody: JSON.parse(body) as unknown,
@@ -207,7 +177,7 @@ export class VercelGatewayClient {
       signal?.addEventListener('abort', onUserAbort, { once: true })
 
       try {
-        const res = await this.fetchImpl(this.endpoint, {
+        const res = await this.fetchImpl(JEV_ENDPOINT, {
           method: 'POST',
           headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
           body,
@@ -225,13 +195,11 @@ export class VercelGatewayClient {
           try {
             const envelope = validateEvaluateEnvelope(parsed)
             const latencyMs = this.now() - started
-            this.onAttempt?.({ attempt, status, kind: null, latencyMs, waitMs: null, generationId: envelope.generationId })
             return {
               ...envelope,
               attempts: attempt,
               elapsedMs: this.now() - startedAll,
               latencyMs,
-              raw: parsed,
               exchange: exchangeOf(status, parsed, text, attempt, latencyMs),
             }
           } catch (e) {
@@ -272,10 +240,9 @@ export class VercelGatewayClient {
       })
 
       const retryable = RETRYABLE_KINDS.has(kind)
-      const tooLongRetryAfter = retryAfterMs !== null && retryAfterMs > this.maxRetryAfterMs
+      const tooLongRetryAfter = retryAfterMs !== null && retryAfterMs > MAX_RETRY_AFTER_MS
       const willRetry = retryable && attempt < this.maxAttempts && !tooLongRetryAfter
       const waitMs = willRetry ? this.waitFor(attempt, retryAfterMs) : null
-      this.onAttempt?.({ attempt, status, kind, latencyMs: this.now() - started, waitMs, generationId })
 
       if (!willRetry || waitMs === null) throw last
       await this.sleep(waitMs, signal)
@@ -288,7 +255,7 @@ export class VercelGatewayClient {
   private waitFor(attempt: number, retryAfterMs: number | null): number {
     // Retry-After は上流の明示的な指示なのでジッタで早めない（早めると再び 429 になる）
     if (retryAfterMs !== null) return retryAfterMs
-    const base = this.backoffMs[Math.min(attempt - 1, this.backoffMs.length - 1)] ?? 6000
+    const base = BACKOFF_MS[Math.min(attempt - 1, BACKOFF_MS.length - 1)]
     // ±30% のジッタ。複数タブ・並列呼び出しが同時に再試行して再び弾かれるのを避ける
     return Math.round(base * (0.7 + this.random() * 0.6))
   }

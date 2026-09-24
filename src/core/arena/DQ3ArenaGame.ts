@@ -18,7 +18,8 @@ import type { ArenaRoundResult, Contestant, MatchOffer } from './types'
 
 export interface ArenaGameOptions {
   engine: BattleEngine
-  drawPolicy?: DrawPolicy
+  /** 引き分けの扱いは設定画面で試合の合間に変わるので、値ではなく読み出し関数で受け取る */
+  drawPolicy?: () => DrawPolicy
   /** 試合 38（あやしいかげ）をマッチメイクの候補に含めるか。Phase B 完了まで既定 false */
   includeShadowMatch?: boolean
 }
@@ -34,7 +35,7 @@ function buildContestants(cardIndex: number, rng: RandomSource): { contestants: 
 }
 
 export function createDQ3ArenaGame(options: ArenaGameOptions): ArenaGame {
-  const drawPolicy = options.drawPolicy ?? 'refund'
+  const getDrawPolicy = options.drawPolicy ?? (() => 'refund')
   const includeShadowMatch = options.includeShadowMatch ?? false
 
   const offerFor = (cardIndex: number, heroLevel: number, round: number, rng: RandomSource, excludedShadowMatch: boolean): MatchOffer => {
@@ -75,6 +76,7 @@ export function createDQ3ArenaGame(options: ArenaGameOptions): ArenaGame {
         { monsterIds: offer.contestants.map((c) => c.monsterId), heroLevel: offer.heroLevel, betSlot },
         new SeededRandom(battleSeed),
       )
+      const drawPolicy = getDrawPolicy()
       const s = settle({ stake: offer.stake, odds: offer.contestants[betSlot].odds, outcome: battle.outcome, betSlot, drawPolicy })
       return {
         offer,

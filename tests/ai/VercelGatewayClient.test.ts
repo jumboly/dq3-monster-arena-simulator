@@ -3,7 +3,7 @@ import { VercelGatewayClient, parseRetryAfter } from '../../src/ai/VercelGateway
 import { AiGatewayError, redactSecrets } from '../../src/ai/errors'
 import { FAKE_KEY, choiceBody, mockFetch, noSleep } from './fixtures'
 
-const request = { state: { a: 1 }, questions: { q: { type: 'boolean' as const, instructions: 'x' } } }
+const request = { state: { a: 1 }, questions: { q: { type: 'choice' as const, instructions: 'x', criteria: { A: 'a' } } } }
 const ok = { status: 200, body: choiceBody({ A: 1 }) }
 const unavailable = { status: 503, body: { error: { type: 'service_unavailable_error', message: 'Service temporarily unavailable.' } } }
 
@@ -182,11 +182,9 @@ describe('VercelGatewayClient', () => {
       expect(e.message).not.toContain(FAKE_KEY)
     })
 
-    it('onAttempt の観測・成功結果にキーを含めない', async () => {
-      const seen: unknown[] = []
-      const { c } = client([unavailable, ok], { onAttempt: (i) => seen.push(i) })
+    it('再試行を経た成功結果にキーを含めない', async () => {
+      const { c } = client([unavailable, ok])
       const r = await c.evaluate(request, { apiKey: FAKE_KEY })
-      expect(JSON.stringify(seen)).not.toContain(FAKE_KEY)
       expect(JSON.stringify(r)).not.toContain(FAKE_KEY)
     })
 

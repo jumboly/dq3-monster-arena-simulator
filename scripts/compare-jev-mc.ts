@@ -43,7 +43,6 @@ const pct = (x: number) => `${(x * 100).toFixed(0)}%`.padStart(4)
 
 for (const cardNo of cards.length ? cards : [1, 20, 29]) {
   const offer = game.createOfferForCard({ cardIndex: cardNo - 1, heroLevel: 30, round: 1, seed: cardNo })
-  const n = offer.contestants.length
   // Monte Carlo は「その選手に賭けたとき」の勝率（Group 4 の影響を含む）
   const mc = offer.contestants.map((c) => {
     let wins = 0
@@ -65,5 +64,5 @@ for (const cardNo of cards.length ? cards : [1, 20, 29]) {
     await new Promise((r) => setTimeout(r, GAP_MS))
   }
   console.log(`  ${'MC'.padEnd(8)}     ${offer.contestants.map((c, k) => `${c.name} ${pct(mc[k])}`).join(' / ')}`)
-  console.log(`  ${'odds'.padEnd(8)}     ${offer.contestants.map((c) => `${c.name} ×${game.oddsValue(offer, c.slot)}`).join(' / ')}${n ? '' : ''}`)
+  console.log(`  ${'odds'.padEnd(8)}     ${offer.contestants.map((c) => `${c.name} ×${game.oddsValue(offer, c.slot)}`).join(' / ')}`)
 }

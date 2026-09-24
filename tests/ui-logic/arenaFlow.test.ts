@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { BetDecision, BettingAgent, MatchObservation } from '../../src/ai/BettingAgent'
-import { createMockArenaGame } from '../../src/core/arena/mockArenaGame'
+import { createDQ3ArenaGame } from '../../src/core/arena/DQ3ArenaGame'
+import type { DrawPolicy } from '../../src/core/arena/payout'
+import { DQ3BattleEngine } from '../../src/core/battle/DQ3BattleEngine'
 import { MemoryStorage } from '../../src/storage/localStorage'
 import { createStores } from '../../src/storage/session'
 import { MockBettingAgent } from '../../src/ui/agents/MockBettingAgent'
@@ -20,11 +22,11 @@ import { runAutoPlay } from '../../src/ui/logic/autoPlay'
 import { buildExport } from '../../src/ui/logic/exportData'
 import { groupByTurn } from '../../src/ui/logic/logView'
 
-const game = createMockArenaGame()
+const game = createDQ3ArenaGame({ engine: new DQ3BattleEngine() })
 const newSession = (over: Partial<Parameters<typeof createSession>[0]> = {}) =>
   createSession({ heroLevel: 30, initialGold: 10000, informationMode: 'classic', playerMode: 'human', seed: 123, ...over })
 
-describe('mock ArenaGame', () => {
+describe('ArenaGame', () => {
   it('同じ seed なら同じ試合・同じ戦闘', () => {
     const a = game.createOffer({ heroLevel: 30, round: 1, seed: 9 })
     const b = game.createOffer({ heroLevel: 30, round: 1, seed: 9 })
@@ -251,21 +253,20 @@ describe('contract v2 (listCards / createOfferForCard / drawPolicy)', () => {
     expect(entry.drawPolicy).toBe('refund')
   })
 
-  it('引き分けの払い戻しは drawPolicy に従う', () => {
-    const refund = createMockArenaGame({ drawPolicy: 'refund' })
-    const forfeit = createMockArenaGame({ drawPolicy: 'forfeit' })
-    // 引き分けになる組み合わせを探す（モックは 10 ターン打ち切り）
-    for (const card of refund.listCards().filter((c) => c.playable)) {
-      const offer = refund.createOfferForCard({ cardIndex: card.index, heroLevel: 30, round: 0, seed: 0 })
-      for (const c of offer.contestants) {
-        for (let seed = 0; seed < 300; seed++) {
-          const a = refund.resolveBet({ offer, betSlot: c.slot, goldBefore: 1000, battleSeed: seed })
-          if (!a.draw) continue
-          const b = forfeit.resolveBet({ offer, betSlot: c.slot, goldBefore: 1000, battleSeed: seed })
-          expect(a.delta).toBe(0)
-          expect(b.delta).toBe(-offer.stake)
-          return
-        }
+  it('引き分けの払い戻しは解決時点の drawPolicy に従う（設定変更が次の試合から反映される）', () => {
+    let policy: DrawPolicy = 'refund'
+    const g = createDQ3ArenaGame({ engine: new DQ3BattleEngine(), drawPolicy: () => policy })
+    for (const card of g.listCards().filter((c) => c.playable)) {
+      const offer = g.createOfferForCard({ cardIndex: card.index, heroLevel: 30, round: 0, seed: 0 })
+      for (let seed = 0; seed < 300; seed++) {
+        policy = 'refund'
+        const a = g.resolveBet({ offer, betSlot: 0, goldBefore: 1000, battleSeed: seed })
+        if (!a.draw) continue
+        policy = 'forfeit'
+        const b = g.resolveBet({ offer, betSlot: 0, goldBefore: 1000, battleSeed: seed })
+        expect(a.delta).toBe(0)
+        expect(b.delta).toBe(-offer.stake)
+        return
       }
     }
     throw new Error('引き分けの seed が見つからない')

@@ -25,7 +25,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # テストが落ちた版は公開しない
+      # lint・テストが落ちた版は公開しない（型チェックは build の tsc -b が tests/scripts も含めて行う）
+      - run: npm run lint
       - run: npm test
       - run: npm run build
         env:

@@ -4,19 +4,6 @@
  * レスポンス側は信用できない外部入力なので型ではなく `schemas/` のバリデータで扱う。
  */
 
-export interface JevBooleanQuestion {
-  type: 'boolean'
-  instructions: string
-  criteria?: { true: string; false: string }
-}
-
-export interface JevScoreQuestion {
-  type: 'score'
-  instructions: string
-  /** 低い順のレベル文言 */
-  criteria: string[]
-}
-
 export interface JevChoiceQuestion {
   type: 'choice'
   instructions: string
@@ -24,12 +11,10 @@ export interface JevChoiceQuestion {
   criteria: Record<string, string>
 }
 
-export type JevQuestion = JevBooleanQuestion | JevScoreQuestion | JevChoiceQuestion
-
 export interface JevEvaluateRequest {
   state: unknown
   /** キーはモデルに渡らない（応答の対応付けにだけ使われる） */
-  questions: Record<string, JevQuestion>
+  questions: Record<string, JevChoiceQuestion>
 }
 
 export const JEV_MODEL_ID = 'typesafe-ai/jev'
