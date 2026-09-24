@@ -35,7 +35,7 @@ export interface CombatantState {
   /** 戦闘の場にいる（死亡でも true のことがある。バシルーラ・逃走で false） */
   active: boolean
   dead: boolean
-  /** ラリホーカウンター。0 なら起きている */
+  /** 眠り: 0 なら起きている。1..4 は次が何回目の覚醒判定か */
   sleepCounter: number
   paralyzed: boolean
   confused: boolean

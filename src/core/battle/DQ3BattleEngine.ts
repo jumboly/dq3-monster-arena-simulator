@@ -52,6 +52,8 @@ const MAX_COMBATANTS = 24
 const INFINITE_MP = 65535
 /** あやしいかげ（battle-spec §2.4） */
 const SHADOW_MONSTER_ID = 0x19
+/** 眠りの n 回目の覚醒判定の分母（1/8, 1/3, 1/2, 1/1） */
+const SLEEP_WAKE_DENOMS = [8, 3, 2, 1] as const
 /** 守備力の上限（$0299F5, battle-spec §7.5, Confirmed） */
 const DEFENSE_CAP = 1023
 /** ダメージ構造体の「全快」マジックナンバー（battle-spec §7.3, Confirmed） */
@@ -458,23 +460,8 @@ class BattleRun {
       f.pendingActionCount = 0
       f.s.defending = false // $2050.bit7 防御状態をクリア
     }
-    // U-07 暫定: 混乱は毎ターン開始時に 1/2 で回復（完全な仮置き）。
-    // ROM 上の位置は不明なので、ターン開始処理と同じ 23→0 の順で素早さ決定より前に引く
-    for (let x = MAX_COMBATANTS - 1; x >= 0; x--) {
-      const f = this.fighters[x]
-      if (!f || !this.isAlive(f) || !f.s.confused) continue
-      this.hit('U-07')
-      if ((this.rng.rand00FF() & 1) === 0) {
-        f.s.confused = false
-        this.push({
-          turn: this.turn,
-          kind: 'status',
-          actorSlot: f.s.slot,
-          simple: `${this.nm(f)}は われにかえった！`,
-          internal: { actorIndex: x, fidelity: 'U-07' },
-        })
-      }
-    }
+    // 混乱は戦闘終了まで自然回復しない（RGH 小ネタ集・gcgx・大辞典、docs/research/fidelity-review.md #7）。
+    // 味方からの攻撃で解ける経路（覚醒考慮）は格闘場で成立するか公開資料では決まらず、実装しない（Approximation）
     // $23B0..$23B7 = 0
     this.usedConstrained.fill(0)
   }
@@ -694,7 +681,12 @@ class BattleRun {
       case 0x16: // 回復・自グループ単体（人間）
       case 0x17: // 回復・自グループ単体（神）
         return single(this.ownGroup(f).filter((t) => t.s.hp < t.s.maxHp))
-      case 0x05: // 自身（ぼうぎょ）
+      case 0x18: // 回復・自身（人間）
+      case 0x19: // 回復・自身（神）
+        // j16/17 と同じ「HP が減っていれば選ぶ」とみなす。格闘場は 1 グループ 1 体なので自グループ = 自身になり、
+        // #11 で自身版の ID に替えても勝率が変わらないことを実測で確かめた（fidelity-review.md #11）
+        return f.s.hp < f.s.maxHp ? { ok: true, target: f.s.combatantIndex } : { ok: false }
+      case 0x05: // 自身（ぼうぎょ・回復（バカ））
         return { ok: true, target: f.s.combatantIndex }
       case 0x07: // 自グループ（スクルト: バカ/人間）
       case 0x31: // スクルト（神）
@@ -831,11 +823,19 @@ class BattleRun {
     return this.checkBattleEnd()
   }
 
-  /** U-08 暫定: 自分の手番（行動枠 0）でラリホーカウンターを 1 減らし、0 になったらその手番から行動可 */
+  /**
+   * 自分の手番（行動枠 0）ごとの覚醒判定。n 回目の成功率は 1/8, 1/3, 1/2, 1（RGH 小ネタ集・gcgx）。
+   * sleepCounter は「次が何回目の判定か」を持つ。行動はターン開始時に決めるので、起きたターンは動けず次のターンから動く。
+   * 乱数の引き方（1/8 = rand0toA(7) === 0 など）は推測（Approximation）
+   */
   private tickSleep(f: Fighter): void {
     this.hit('U-08')
-    f.s.sleepCounter -= 1
-    if (f.s.sleepCounter === 0) {
+    const n = f.s.sleepCounter
+    const d = SLEEP_WAKE_DENOMS[Math.min(n, SLEEP_WAKE_DENOMS.length) - 1]
+    // 4 回目は必ず覚醒するので乱数を引かない
+    const woke = d === 1 || this.rng.rand0toA(d - 1) === 0
+    f.s.sleepCounter = woke ? 0 : n + 1
+    if (woke) {
       this.push({
         turn: this.turn,
         kind: 'status',
@@ -1258,14 +1258,14 @@ class BattleRun {
     })
   }
 
-  /** 眠り付与（$02B5D8）。U-08 暫定: カウンター 1..3 を一様。既に眠っていれば c=on で抜ける（メッセージなし） */
+  /** 眠り付与（$02B5D8）。覚醒判定を 1 回目から始める。既に眠っていれば c=on で抜ける（メッセージなし） */
   private applySleep(f: Fighter, t: Fighter, detail: Record<string, number>): void {
     if (t.s.sleepCounter !== 0) {
       this.push({ turn: this.turn, kind: 'note', simple: '', internal: { alreadyAsleep: true, targetIndex: t.s.combatantIndex } })
       return
     }
     this.hit('U-08')
-    t.s.sleepCounter = this.rng.rand0toA(2) + 1
+    t.s.sleepCounter = 1
     this.push({
       turn: this.turn,
       kind: 'status',
@@ -1507,12 +1507,14 @@ class BattleRun {
       detail = { ...detail, before, after: v }
     } else if (kind === 'rukanan') {
       const before = t.s.defense
-      t.s.defense = Math.max(0, before - Math.floor(t.baseDefense / 2))
+      // 現在の守備力の 1/2 を下げる（gcgx・dqwiz・d-navi が一致。fidelity-review.md #14）
+      t.s.defense = before - Math.floor(before / 2)
       text = `${this.nm(t)}の しゅびりょくが ${before - t.s.defense} さがった！`
       detail = { ...detail, before, after: t.s.defense }
     } else {
       const before = t.s.agility
-      t.s.agility = Math.max(0, before - Math.floor(t.baseAgility / 2))
+      // 素早さを 0 にする（gcgx・dqwiz・大辞典が一致。fidelity-review.md #14）
+      t.s.agility = 0
       t.s.agilityModifier = t.s.agility - t.baseAgility
       text = `${this.nm(t)}の すばやさが ${before - t.s.agility} さがった！`
       detail = { ...detail, before, after: t.s.agility }

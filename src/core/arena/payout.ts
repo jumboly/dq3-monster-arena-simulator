@@ -13,7 +13,11 @@ export function stakeFor(heroLevel: number): number {
 }
 
 /**
- * 引き分け（終了タイプ 7）の扱い。実機で返金されるかは資料がない（Unknown, U-20）ので切り替え可能にする。
+ * 引き分け（終了タイプ 7）の扱い。
+ * - refund: 賭けた選手が生き残った引き分け（10 ターン経過）だけ返金し、生存 0 体の引き分けは没収。
+ *   大辞典・gcgx・RP2nd がそろって「賭けたモンスターが生き残っている場合のみ返還」としている（Likely。
+ *   docs/research/fidelity-review.md #20）
+ * - forfeit: 引き分けはすべて没収（比較用）
  */
 export type DrawPolicy = 'refund' | 'forfeit'
 
@@ -28,7 +32,7 @@ export interface Settlement {
 
 /**
  * 当たり(5)の払い戻し = 賭け金 × オッズ。賭け金は常に 10 の倍数、オッズは小数 1 桁なので
- * 整数演算で端数なく計算できる（stake / 10 × odds10）。式そのものは未公開（Unknown, U-20）。
+ * 整数演算で端数なく計算できる（stake / 10 × odds10）。賭け金込みの総額（RP2nd の期待値計算と整合, Likely）。
  */
 export function settle(params: { stake: number; odds: Odds; outcome: BattleOutcome; betSlot: number; drawPolicy: DrawPolicy }): Settlement {
   const { stake, odds, outcome, betSlot, drawPolicy } = params
@@ -37,7 +41,8 @@ export function settle(params: { stake: number; odds: Odds; outcome: BattleOutco
     return { won: true, draw: false, payout, delta: payout - stake }
   }
   if (outcome.kind === 'draw') {
-    const payout = drawPolicy === 'refund' ? stake : 0
+    // turn-limit の引き分けは定義上「賭けた選手が生存」、all-inactive は生存 0 体なので賭けた選手も倒れている
+    const payout = drawPolicy === 'refund' && outcome.reason === 'turn-limit' ? stake : 0
     return { won: false, draw: true, payout, delta: payout - stake }
   }
   return { won: false, draw: false, payout: 0, delta: -stake }

@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildGameData } from '../../scripts/lib/buildGameData'
-import { createCommandNameResolver, LABEL_RULES } from '../../scripts/lib/commandNames'
+import { createCommandNameResolver, LABEL_RULES, MONSTER_COMMAND_OVERRIDES } from '../../scripts/lib/commandNames'
 import { parseDqbookTable, readBool, readDec, readHex } from '../../scripts/lib/dqbookTable'
 
 const root = join(__dirname, '../..')
@@ -43,9 +43,20 @@ describe('コマンド名解決', () => {
     expect(resolver.resolve('メラ', 'test')).toBe(6)
     expect(resolver.resolve('（痛恨の一撃）', 'test')).toBe(2)
     expect(resolver.resolve('ホイミ', 'test')).toBe(31)
+    // モンスター別の上書き（自身版）が代表 ID より優先される
+    expect(resolver.resolve('ホイミ', 'test', 'わらいぶくろ')).toBe(32)
+    expect(resolver.resolve('ホイミ', 'test', 'ホイミスライム')).toBe(31)
+    expect(resolver.resolve('べホマ', 'test', 'エビルマージ')).toBe(38)
     expect(() => resolver.resolve('（存在しない）', 'test')).toThrow(/解決できない/)
     // 同名規則の無い重複名（やくそう = 131/169）は黙って選ばず曖昧として失敗する
     expect(() => resolver.resolve('やくそう', 'test')).toThrow(/曖昧/)
+  })
+
+  it('モンスター別の上書きはすべて実データに反映されている（死んだ規則を残さない）', () => {
+    for (const o of MONSTER_COMMAND_OVERRIDES) {
+      const m = gameData.monsters.find((x) => x.name === o.monster)
+      expect(m?.commands, `${o.monster} ${o.name}`).toContain(o.commandId)
+    }
   })
 
   it('便宜名規則はすべてモンスター表で使われている（死んだ規則を残さない）', () => {

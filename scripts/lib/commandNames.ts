@@ -286,11 +286,35 @@ export const AMBIGUOUS_NAME_CHOICES: readonly AmbiguousNameChoice[] = [
   { name: 'スクルト', commandId: 58, candidates: [58, 59, 60, 61], fidelity: 'unknown' },
 ]
 
+/**
+ * 同名コマンドのモンスター別の上書き（AMBIGUOUS_NAME_CHOICES より優先）。
+ *
+ * dqwiz「SFC/GBC モンスターの行動」は回復呪文を「（自分）」「（仲間）」と使い手ごとに区別しており、
+ * 「自分」はコマンド表で対象陣営 1（自身）の変種 32/35/38 だけに当てはまる（構造が一致する）。
+ * 生の ID を ROM で確かめたわけではないので Likely。スクルト（全）= 61 は格闘場での「全体」の
+ * 意味が決まらないため上書きせず、代表 ID のまま（docs/research/fidelity-review.md #11）。
+ */
+export interface MonsterCommandOverride {
+  monster: string
+  name: string
+  commandId: number
+  fidelity: Extract<Fidelity, 'likely'>
+}
+
+export const MONSTER_COMMAND_OVERRIDES: readonly MonsterCommandOverride[] = [
+  { monster: 'わらいぶくろ', name: 'ホイミ', commandId: 32, fidelity: 'likely' },
+  { monster: 'マージマタンゴ', name: 'ホイミ', commandId: 32, fidelity: 'likely' },
+  { monster: 'バーナバス', name: 'べホイミ', commandId: 35, fidelity: 'likely' },
+  { monster: 'まほうおばば', name: 'べホイミ', commandId: 35, fidelity: 'likely' },
+  { monster: 'エビルマージ', name: 'べホマ', commandId: 38, fidelity: 'likely' },
+]
+
 /** モンスター表で `n/a` と書かれたコマンド欄。ID 0（全属性 0 の空コマンド）に対応させる */
 export const NULL_COMMAND_ID = 0
 
 export interface CommandNameResolver {
-  resolve(label: string, context: string): number
+  /** monster を渡すと MONSTER_COMMAND_OVERRIDES を優先する */
+  resolve(label: string, context: string, monster?: string): number
   /** 表示名。名前 = n/a のコマンドには規則の表記（括弧付き便宜名）を与える */
   displayName(commandId: number): string
 }
@@ -337,9 +361,19 @@ export function createCommandNameResolver(commands: readonly ParsedCommand[]): C
     ambiguousMap.set(choice.name, choice.commandId)
   }
 
+  const overrideMap = new Map<string, number>()
+  for (const o of MONSTER_COMMAND_OVERRIDES) {
+    const ids = byName.get(o.name) ?? []
+    // 候補外の ID を指す上書きは、原典の改版か規則の書き間違い
+    if (!ids.includes(o.commandId)) throw new Error(`上書き ${o.monster} ${o.name}: ID ${o.commandId} は候補 [${ids}] に無い`)
+    overrideMap.set(`${o.monster}\t${o.name}`, o.commandId)
+  }
+
   return {
-    resolve(label, context) {
+    resolve(label, context, monster) {
       if (label === 'n/a') return NULL_COMMAND_ID
+      const overridden = monster === undefined ? undefined : overrideMap.get(`${monster}\t${label}`)
+      if (overridden !== undefined) return overridden
       const byLabel = labelMap.get(label)
       if (byLabel !== undefined) return byLabel
       const ids = byName.get(label)
