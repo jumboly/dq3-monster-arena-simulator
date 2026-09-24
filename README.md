@@ -21,7 +21,8 @@ SFC版『ドラゴンクエストIII そして伝説へ…』のモンスター�
 - **Human モード**: BET → 即結果 → 次の試合、というテンポ重視の進行。Classic（名前とオッズだけ）/ Analyst（能力値・行動と選択率・AI・耐性・特性）の 2 つの情報モード。
 - **Jev モード**: Vercel AI Gateway 経由で Jev に勝者予測を問い合わせ、確率と賭け先を表示してから戦闘。Auto Play（10 / 100 / 1000 試合、確認・上限・Stop 付き）。
 - **Battle Log**: Simple / Detail（計算根拠）/ Internal（コマンド ID・対象・乱数）の 3 層。ターン単位の Replay。
-- **History / Statistics**: 試合履歴の再表示、勝率・収支・ROI、AI 予測の Brier Score と較正表。
+- **冒険の書**: セッションを「冒険の書」として何冊でも残し、切り替えて遊べます（つくる / うつす / けす / なまえを かえる）。「同じ試合順で はじめから」うつすと seed を引き継ぐので、同じ試合列で Jev の設定や情報モードを比べられます。
+- **History / Statistics**: 試合履歴の再表示、勝率・収支・ROI、AI 予測の Brier Score と較正表、冒険の書どうしの比較表。JSON エクスポートは 1 冊単位とすべての冊の 2 種類。
 - **Analysis（Monte Carlo）**: 通常ゲームとは別画面で、カードと賭け先ごとに `P(Winner=i | Match, Bet=j)` を多数回シミュレーションで推定。
 - **再現性**: 戦闘はシード付き乱数で決定的に再生でき、ゴールデンテストで固定しています。
 
@@ -36,12 +37,13 @@ Browser (GitHub Pages, no backend)
 ├─ Data                    src/core/data/   vendor/dqbook の表から生成した JSON のローダ
 ├─ AI Player               src/ai/          BettingAgent ← JevBettingAgent → VercelGatewayClient → Jev
 ├─ Stats                   src/core/stats/  収支・Brier Score・勝率分布（純関数）
-└─ localStorage            src/storage/     API キー / 設定 / セッション / 履歴
+└─ localStorage            src/storage/     API キー / 設定 / 冒険の書（sessions）/ 冊ごとの履歴（history.<id>）
 ```
 
 - **戦闘ロジックは React から独立**しています（`src/core/` は UI・localStorage に依存しない純 TypeScript）。UI は `ArenaGame` インターフェース（`src/core/arena/ArenaGame.ts`）だけを通して格闘場を操作します。
 - **AI は `BettingAgent` インターフェースで分離**しています。AI には `MatchObservation`（賭ける前に人間にも見せてよい情報）だけを渡し、乱数シード・実際の初期 HP・あやしいかげの実体などの Hidden Runtime State は渡しません。Classic / Analyst の画面表示と AI への入力は同じ関数（`buildObservation`）から作ります。
 - **乱数は差し替え可能**です。エンジンは ROM の呼び出し口（`rand00FF`, `rand0toA`, `rand63to99` など）と 1 対 1 の `RomRandom` だけを使うので、将来 SFC 実機の乱数生成器（`SfcDq3Rng`）を実装したときに消費順まで合わせられます。
+- **保存容量**: localStorage は概ね 5M 文字です。Battle Log（1 試合 約 15KB）は遊んでいる冒険の書の直近 30 試合だけ保持し、他の冊は要約（約 0.8KB）だけ残します。ログは battleSeed から再生成できます。冒険の書導入前の単一セッションは、初回起動時に「冒険の書 1」へ自動で移行します。
 - 賭けた選手（Group 4）が戦闘処理の分岐を変えるため、勝率は `P(Winner=i | Match, Bet=j)` として扱います（例: 賭けると回避率の分母が 48 → 64 になる）。
 
 ## How to Run
