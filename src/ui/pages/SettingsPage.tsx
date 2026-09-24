@@ -115,7 +115,7 @@ export function SettingsPage({ onSessionCleared }: { onSessionCleared: () => voi
         confirmLabel="削除"
         cancelLabel="やめる"
         onConfirm={() => {
-          store.clearSession()
+          if (session) store.deleteBook(session.id)
           setConfirmClear(false)
           onSessionCleared()
         }}

@@ -43,6 +43,7 @@ export class AutoPlayController {
     if (this.state.running) return
     const ac = new AbortController()
     this.abort = ac
+    this.store.setLocked(true)
     this.set({ running: true, progress: null, lastStop: null })
     try {
       const { reason, progress } = await runAutoPlay({
@@ -69,6 +70,7 @@ export class AutoPlayController {
       this.set({ running: false, progress: withErr, lastStop: { reason: 'failures', progress: withErr, agentLabel: agent.label } })
     } finally {
       this.abort = null
+      this.store.setLocked(false)
     }
   }
 

@@ -29,7 +29,7 @@ export function StartPage({ onStarted }: { onStarted: () => void }) {
   const valid = lvValid && goldValid
 
   const start = () => {
-    store.startSession({ heroLevel: clampHeroLevel(lv), initialGold: gold, informationMode, playerMode })
+    store.createBook({ heroLevel: clampHeroLevel(lv), initialGold: gold, informationMode, playerMode })
     setConfirming(false)
     onStarted()
   }

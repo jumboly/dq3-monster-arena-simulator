@@ -1,13 +1,19 @@
 /**
- * セッション・履歴・設定の永続化モデル。
+ * セッション（冒険の書）・履歴・設定の永続化モデル。
+ *
+ * 冒険の書は何冊でも持てる。キーの分け方:
+ * - `sessions`: 全冊の Session（1 冊数百バイト）。一覧表示のために全履歴を読まずに済むよう分ける
+ * - `activeSessionId`: いま遊んでいる冊
+ * - `history.<id>`: 冊ごとの試合履歴
  *
  * 容量方針（localStorage は概ね 5MB / オリジン）:
- * - Battle Log を含む BattleResult 全体は直近 LOG_RETENTION 件だけ保持する。
+ * - Battle Log を含む BattleResult 全体は、遊んでいる冊の直近 LOG_RETENTION 件だけ保持する。
+ *   他の冊はログを捨てた要約だけにする（1 試合の要約は実測で約 0.8KB、ログ付きは約 15KB）。
  *   1 試合のログは数 KB〜十数 KB になりうるため、Auto Play 1000 回で全件保持すると溢れる。
  * - それより古い履歴はログを捨てて要約（勝敗・ターン数・fidelityHits）だけ残す。
  *   battleSeed と offer は残すので、ArenaGame.resolveBet に同じ引数を渡せばログを再生成できる
  *   （ただしエンジンの版が変わると再生成結果が変わりうる点は UI で注記する）。
- * - 履歴自体も HISTORY_LIMIT 件で打ち切る（要約だけでも無制限だと溢れるため）。
+ * - 履歴自体も冊ごとに HISTORY_LIMIT 件で打ち切る（要約だけでも無制限だと溢れるため）。
  * - それでも容量超過したら、ログ保持件数を減らしながら再保存を試みる（saveHistory）。
  *
  * API キーはここでは一切扱わない（src/storage/apiKey.ts の責務。エクスポートにも含めないため）。
@@ -16,7 +22,7 @@ import type { BetDecision, InformationMode } from '../ai/BettingAgent'
 import type { MatchOffer } from '../core/arena/types'
 import type { ArenaEndType, BattleOutcome, BattleResult } from '../core/battle/types'
 import type { DrawPolicy } from '../core/arena/payout'
-import { createVersionedStore, type KeyValueStorage, type SaveResult } from './localStorage'
+import { createVersionedStore, type KeyValueStorage, type SaveResult, type VersionedStore } from './localStorage'
 
 export type PlayerMode = 'human' | 'jev'
 export type JevPolicy = 'max-ev' | 'max-win'
@@ -26,7 +32,11 @@ export const HISTORY_LIMIT = 5000
 
 export interface Session {
   id: string
+  /** 冒険の書の名前（利用者が付け替えられる） */
+  name: string
   createdAt: string
+  /** 最後に遊んだ・変更した時刻。一覧で新しい順に見せるため */
+  updatedAt: string
   heroLevel: number
   initialGold: number
   gold: number
@@ -108,7 +118,10 @@ function isObj(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null
 }
 
-export function isSession(x: unknown): x is Session {
+/** 冒険の書導入前（name / updatedAt なし）の Session。旧キーからの移行でだけ使う */
+export type LegacySession = Omit<Session, 'name' | 'updatedAt'>
+
+export function isLegacySession(x: unknown): x is LegacySession {
   return (
     isObj(x) &&
     typeof x.id === 'string' &&
@@ -121,6 +134,14 @@ export function isSession(x: unknown): x is Session {
     (x.playerMode === 'human' || x.playerMode === 'jev') &&
     (x.phase === 'match' || x.phase === 'result')
   )
+}
+
+export function isSession(x: unknown): x is Session {
+  return isLegacySession(x) && typeof (x as Session).name === 'string' && typeof (x as Session).updatedAt === 'string'
+}
+
+function isSessionList(x: unknown): x is Session[] {
+  return Array.isArray(x) && x.every(isSession)
 }
 
 function isHistoryEntry(x: unknown): x is HistoryEntry {
@@ -149,20 +170,81 @@ export function isSettings(x: unknown): x is Settings {
 
 // --- stores ---------------------------------------------------------------
 
+export type HistoryStore = VersionedStore<HistoryEntry[]>
+
 export function createStores(storage?: KeyValueStorage) {
   return {
-    session: createVersionedStore<Session>({ key: 'session', version: 1, validate: isSession, storage }),
-    history: createVersionedStore<HistoryEntry[]>({ key: 'history', version: 1, validate: isHistory, storage }),
+    sessions: createVersionedStore<Session[]>({ key: 'sessions', version: 1, validate: isSessionList, storage }),
+    activeSessionId: createVersionedStore<string>({
+      key: 'activeSessionId',
+      version: 1,
+      validate: (x): x is string => typeof x === 'string',
+      storage,
+    }),
+    /** 冊ごとの履歴。呼ぶたびに作るが中身は状態を持たない薄いラッパなので問題ない */
+    historyOf: (sessionId: string): HistoryStore =>
+      createVersionedStore<HistoryEntry[]>({ key: `history.${sessionId}`, version: 1, validate: isHistory, storage }),
     settings: createVersionedStore<Settings>({
       key: 'settings',
       version: 1,
       validate: isSettings,
       storage,
     }),
+    /** 冒険の書導入前の単一セッション用キー。移行（migrateLegacyStorage）でだけ読む */
+    legacy: {
+      session: createVersionedStore<LegacySession>({ key: 'session', version: 1, validate: isLegacySession, storage }),
+      history: createVersionedStore<HistoryEntry[]>({ key: 'history', version: 1, validate: isHistory, storage }),
+    },
   }
 }
 
 export type Stores = ReturnType<typeof createStores>
+
+export const LEGACY_BOOK_NAME = '冒険の書 1'
+
+export type MigrationResult =
+  | { status: 'none' }
+  | { status: 'migrated'; session: Session }
+  | { status: 'failed'; result: SaveResult }
+
+/**
+ * 旧キー（session / history）の単一セッションを「冒険の書 1」として新形式へ移す。
+ *
+ * 旧キーは新キーへの保存がすべて成功してから消す。途中で失敗しても旧データは残り、
+ * 次回起動時に再試行される。履歴は数 MB になりうるので、旧キーを残したまま複製すると
+ * それだけで容量超過する。そこで旧履歴はメモリに読んでから一旦消し、新キーへの保存に
+ * 失敗したら同じ内容を書き戻す（元々収まっていた大きさなので書き戻しは成功する）。
+ */
+export function migrateLegacyStorage(stores: Stores): MigrationResult {
+  const legacy = stores.legacy.session.load()
+  // 新形式が既にあるなら、残った旧キーは移行済みの消し損ねとみなして触らない（上書き事故を防ぐ）
+  if (!legacy || stores.sessions.load() !== null) return { status: 'none' }
+
+  const legacyHistory = stores.legacy.history.load() ?? []
+  const history = legacyHistory.filter((h) => h.sessionId === legacy.id)
+  const session: Session = {
+    ...legacy,
+    name: LEGACY_BOOK_NAME,
+    updatedAt: history[history.length - 1]?.playedAt ?? legacy.createdAt,
+  }
+
+  stores.legacy.history.clear()
+  const { result: hr } = saveHistory(stores.historyOf(session.id), history)
+  if (!hr.ok) {
+    stores.legacy.history.save(legacyHistory)
+    return { status: 'failed', result: hr }
+  }
+  const sr = stores.sessions.save([session])
+  if (!sr.ok) {
+    stores.historyOf(session.id).clear()
+    stores.legacy.history.save(legacyHistory)
+    return { status: 'failed', result: sr }
+  }
+  // activeSessionId の保存失敗は致命的ではない（一覧から選び直せる）ので結果を見ない
+  stores.activeSessionId.save(session.id)
+  stores.legacy.session.clear()
+  return { status: 'migrated', session }
+}
 
 export function loadSettings(stores: Stores): Settings {
   // 項目追加時に古い保存値で欠けたフィールドを既定値で埋めるため spread する
@@ -196,14 +278,18 @@ export function trimHistory(history: HistoryEntry[], logRetention = LOG_RETENTIO
  * 容量超過時はログ保持件数を半減させながら再試行する。
  * ログを失っても seed から再生成できるので、履歴そのものを失うよりは良いという判断。
  */
-export function saveHistory(stores: Stores, history: HistoryEntry[]): { result: SaveResult; saved: HistoryEntry[] } {
-  let retention = LOG_RETENTION
+export function saveHistory(
+  store: HistoryStore,
+  history: HistoryEntry[],
+  logRetention = LOG_RETENTION,
+): { result: SaveResult; saved: HistoryEntry[] } {
+  let retention = logRetention
   let saved = trimHistory(history, retention)
-  let result = stores.history.save(saved)
+  let result = store.save(saved)
   while (!result.ok && result.reason === 'quota' && retention > 0) {
     retention = Math.floor(retention / 2)
     saved = trimHistory(history, retention)
-    result = stores.history.save(saved)
+    result = store.save(saved)
   }
   return { result, saved }
 }
