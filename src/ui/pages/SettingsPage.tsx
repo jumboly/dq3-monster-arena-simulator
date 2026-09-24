@@ -1,14 +1,12 @@
 import { useState, type ReactNode } from 'react'
 import { clearApiKey, hasApiKey, saveApiKey } from '../../storage/apiKey'
 import type { JevPolicy } from '../../storage/session'
-import { ConfirmDialog } from '../components/Modal'
 import { Window } from '../components/Window'
 import { useArenaDeps, useArenaState } from '../hooks/arenaContext'
 
-export function SettingsPage({ onSessionCleared }: { onSessionCleared: () => void }) {
+export function SettingsPage() {
   const { store } = useArenaDeps()
   const { session, settings } = useArenaState()
-  const [confirmClear, setConfirmClear] = useState(false)
 
   return (
     <div className="page">
@@ -72,7 +70,7 @@ export function SettingsPage({ onSessionCleared }: { onSessionCleared: () => voi
       </Window>
 
       {session && (
-        <Window title="現在のセッション">
+        <Window title={`いまの冒険の書（${session.name}）`}>
           <fieldset className="field">
             <legend>Information Mode</legend>
             <label className="radio">
@@ -103,26 +101,10 @@ export function SettingsPage({ onSessionCleared }: { onSessionCleared: () => voi
               Jev
             </label>
           </fieldset>
-          <button type="button" className="dq-btn dq-btn-danger" onClick={() => setConfirmClear(true)}>
-            セッションと履歴を削除
-          </button>
+          <p className="muted small">冒険の書の なまえ変更・うつす・けすは、格闘場タブの冒険の書の画面で行います。</p>
         </Window>
       )}
 
-      <ConfirmDialog
-        open={confirmClear}
-        title="削除しますか？"
-        confirmLabel="削除"
-        cancelLabel="やめる"
-        onConfirm={() => {
-          if (session) store.deleteBook(session.id)
-          setConfirmClear(false)
-          onSessionCleared()
-        }}
-        onCancel={() => setConfirmClear(false)}
-      >
-        セッションと試合履歴をこのブラウザから削除します。設定と API キーは残ります。
-      </ConfirmDialog>
     </div>
   )
 }

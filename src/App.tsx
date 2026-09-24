@@ -6,7 +6,10 @@ import { AnalysisPage } from './ui/pages/AnalysisPage'
 import { ArenaPage } from './ui/pages/ArenaPage'
 import { HistoryPage } from './ui/pages/HistoryPage'
 import { SettingsPage } from './ui/pages/SettingsPage'
-import { StartPage } from './ui/pages/StartPage'
+import { BookSelectPage } from './ui/pages/BookSelectPage'
+import { BookList } from './ui/components/BookList'
+import { Modal } from './ui/components/Modal'
+import { describeError } from './ui/logic/autoPlay'
 import { StatsPage } from './ui/pages/StatsPage'
 
 type Tab = 'arena' | 'history' | 'stats' | 'analysis' | 'settings'
@@ -27,6 +30,15 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('arena')
   // 起動時は必ず Start 画面を出し、既存セッションは「続きから」で明示的に再開させる
   const [started, setStarted] = useState(false)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [switchError, setSwitchError] = useState<string | null>(null)
+  const { books } = useArenaState()
+
+  const goToBooks = () => {
+    setSwitcherOpen(false)
+    setStarted(false)
+    setTab('arena')
+  }
 
   const showStart = tab === 'arena' && (!session || !started)
   const needsSession = (tab === 'history' || tab === 'stats') && !session
@@ -39,6 +51,20 @@ export default function App() {
         </h1>
         {session && (
           <p className="status-line" aria-live="polite">
+            <button
+              type="button"
+              className="book-btn"
+              onClick={() => {
+                setSwitchError(null)
+                setSwitcherOpen(true)
+              }}
+              // オートプレイは今の冊に賭け続けるので、実行中は切り替えの入口ごと閉じる
+              disabled={ap.running}
+              aria-haspopup="dialog"
+              title={ap.running ? 'オートプレイ中は切り替えられません' : '冒険の書を切り替える'}
+            >
+              {session.name} ▼
+            </button>
             <span>Lv.{session.heroLevel}</span>
             <span>Gold {formatGold(session.gold)}</span>
             <span>Stake {formatGold(game.stakeFor(session.heroLevel))}</span>
@@ -85,9 +111,9 @@ export default function App() {
 
       <main className="app-main">
         {showStart ? (
-          <StartPage onStarted={() => setStarted(true)} />
+          <BookSelectPage onStarted={() => setStarted(true)} />
         ) : needsSession ? (
-          <p className="muted center">セッションがありません。格闘場タブから始めてください。</p>
+          <p className="muted center">冒険の書が選ばれていません。格闘場タブから選ぶか、つくってください。</p>
         ) : tab === 'arena' && session ? (
           <ArenaPage session={session} onNewSession={() => setStarted(false)} />
         ) : tab === 'history' ? (
@@ -97,14 +123,32 @@ export default function App() {
         ) : tab === 'analysis' ? (
           <AnalysisPage />
         ) : (
-          <SettingsPage
-            onSessionCleared={() => {
-              setStarted(false)
-              setTab('arena')
-            }}
-          />
+          <SettingsPage />
         )}
       </main>
+
+      <Modal open={switcherOpen} title="ぼうけんのしょを えらんでください" onClose={() => setSwitcherOpen(false)}>
+        {switchError && <p className="error small">{switchError}</p>}
+        <BookList
+          books={books}
+          activeId={session?.id}
+          autoFocus
+          onPick={(b) => {
+            try {
+              store.switchBook(b.id)
+              setSwitcherOpen(false)
+              setTab('arena')
+            } catch (e) {
+              setSwitchError(describeError(e))
+            }
+          }}
+        />
+        <div className="dq-actions">
+          <button type="button" className="dq-btn" onClick={goToBooks}>
+            つくる・うつす・けす…
+          </button>
+        </div>
+      </Modal>
 
       <footer className="app-footer muted small">
         非公式のファン製シミュレーターです。株式会社スクウェア・エニックスとは関係ありません。

@@ -301,6 +301,10 @@ p {
   border-color: var(--win);
   color: var(--win);
 }
+.tag-lose {
+  border-color: var(--lose);
+  color: var(--lose);
+}
 
 .notice {
   border: 2px dashed currentColor;
@@ -618,6 +622,108 @@ ul.plain {
 .details-actions {
   margin: 0;
   padding-left: 1.5em;
+}
+
+/* --- 冒険の書 ------------------------------------------------------------- */
+.book-btn {
+  font: inherit;
+  font-family: var(--sans);
+  font-weight: 700;
+  color: var(--accent);
+  background: #000;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  padding: 0 10px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.book-btn:hover:not(:disabled),
+.book-btn:focus-visible {
+  background: #1b1b3a;
+  outline: none;
+}
+.book-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.book-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 2px;
+  /* 冊が増えても一覧だけがスクロールし、下のコマンドが画面外へ逃げないようにする */
+  max-height: min(60svh, 520px);
+  overflow-y: auto;
+}
+.book-row {
+  font: inherit;
+  color: var(--fg);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 12px;
+  align-items: baseline;
+  padding: 6px 8px 6px 26px;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  font-variant-numeric: tabular-nums;
+}
+/* DQ の選択カーソル。フォーカス・ホバー中の冊を ▶ で示す */
+.book-row:not(:disabled):hover::before,
+.book-row:focus-visible::before,
+.book-row.is-highlight::before {
+  content: '▶';
+  position: absolute;
+  left: 8px;
+  top: 7px;
+  font-size: 0.8em;
+  animation: blink 1s steps(1) infinite;
+}
+.book-row:not(:disabled):hover,
+.book-row:focus-visible {
+  background: #10102a;
+  outline: none;
+}
+.book-row:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.book-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.book-gold {
+  font-family: var(--mono);
+}
+.book-sub {
+  grid-column: 1 / -1;
+}
+.book-usage {
+  margin-top: 10px;
+}
+.dq-commands {
+  display: grid;
+  gap: 10px;
+  padding-left: 14px;
+  margin-top: 8px;
+}
+.dq-commands .dq-btn {
+  text-align: left;
+  display: grid;
+  gap: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .book-row::before {
+    animation: none !important;
+  }
 }
 
 /* --- フォーム ------------------------------------------------------------- */
