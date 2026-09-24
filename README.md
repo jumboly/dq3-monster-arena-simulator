@@ -91,7 +91,7 @@ Player Mode を **Jev** にすると、試合ごとに Jev（TypeSafe AI の評�
 - localStorage は同じブラウザを使う人や、同じオリジンで動くスクリプトから読める場所です。**共用 PC・公開 PC では使わないでください。** 使い終わったら設定画面の Clear で削除できます。
 - できるだけ **このツール専用の、利用上限（予算）を設定したキー** を使ってください。
 
-開発者向け: 実装時の Jev 挙動調査（`scripts/probe-jev.ts`）はプロジェクトルートの `.env`（`VERCEL_AI_GATEWAY_API_KEY`、git 管理外）を読みます。公開版の Web アプリはこの値を使いません。
+開発者向け: Jev と Monte Carlo の比較スクリプト（`scripts/compare-jev-mc.ts`）はプロジェクトルートの `.env`（`VERCEL_AI_GATEWAY_API_KEY`、git 管理外）を読みます。公開版の Web アプリはこの値を使いません。
 
 ## Battle Fidelity
 
@@ -106,15 +106,11 @@ Player Mode を **Jev** にすると、試合ごとに Jev（TypeSafe AI の評�
 
 ### Confirmed（主なもの）
 
-- 戦闘メインループの流れと、格闘場モードで分岐する箇所（PC 不在、Group 4 移動、ターン上限 10、生存者数による決着）
-- ターン中の素早さ `floor((すばやさ + 20) × r / 256) + 1`（r = 0..255）と、同値時はインデックスの小さい方が先という行動順
-- コマンド決定戦略 0〜2 のルーレット重み（32×8 / 18..46 / 2..14,200）、同一グループのコマンド制約、知能による MP 判定
-- **格闘場使用許可 0 のコマンド（仲間呼び・にげる）は「通常攻撃に置き換わる」のではなく除外して再抽選**され、8 つすべて除外されたときだけ通常攻撃になる
-- PC 側の前列補正（40/30/20/10）は格闘場では常に無効（Group 5 が存在しないため）
-- 通常攻撃のダメージ式（`攻撃力 − 守備力/2` と乱数 99..153/256、低攻撃力時の 0/1）、痛恨は「痛恨の一撃」コマンドのみ 1/8、呪文・息は敵陣側ダメージ表
-- 防御中はコマンドを問わずダメージ半減、メガンテ（1/2 で即死・1/2 で HP 依存ダメージ）
-- 決着は 1 行動ごとに判定。生存 1 体で決着、0 体で引き分け。10 ターン目を実行し終えた後に打ち切り（賭けた選手が生存なら引き分け、既に倒れていて他が 2 体以上なら**はずれ**）
-- Group 4 の影響: 回避率の分母 48 → 64、集中攻撃の記憶域 `$7E2466`、ダメージ表・打撃式は敵陣側扱い
+- 戦闘メインループと格闘場モードの分岐（PC 不在、Group 4 移動、ターン上限 10、生存者数による決着）、行動順、コマンド決定のルーレット重み
+- **格闘場使用許可 0 のコマンド（仲間呼び・にげる）は通常攻撃に置き換わるのではなく、除外して再抽選**される
+- 通常攻撃・呪文・息のダメージ式、防御、メガンテ、Group 4 の影響（回避率の分母・集中攻撃・ダメージ表）
+
+一覧と出典アドレスは [`battle-spec.md`](docs/research/battle-spec.md) を参照してください。
 
 ### Likely / Approximation
 
@@ -132,39 +128,17 @@ Player Mode を **Jev** にすると、試合ごとに Jev（TypeSafe AI の評�
 
 ## Known Unknowns
 
-推測で埋めず、暫定挙動で実装して Issue に残しています（[unknown ラベルの Issue 一覧](https://github.com/jumboly/dq3-monster-arena-simulator/issues?q=label%3Aunknown)、[`docs/research/unknowns.md`](docs/research/unknowns.md)）。勝率への影響が大きいものは次のとおりです。
-
-| Issue | 内容 | 暫定挙動 |
-|---|---|---|
-| [#1](https://github.com/jumboly/dq3-monster-arena-simulator/issues/1) | 格闘場の対象候補生成 `$027040` | 自分と別グループの、アクティブで倒れていない者から一様に選ぶ |
-| [#4](https://github.com/jumboly/dq3-monster-arena-simulator/issues/4) | 対象決定判断テーブル `$026971`（呪文を選ぶ条件） | 判断番号ごとの妥当な条件 |
-| [#13](https://github.com/jumboly/dq3-monster-arena-simulator/issues/13) | 耐性ロールと状態異常の成否 `$02A3EB` / `$02A406` | 耐性 0/1/2/3 → 成功率 256/192/76/0 ÷ 256 |
-| [#15](https://github.com/jumboly/dq3-monster-arena-simulator/issues/15) | 終了判定での麻痺・バシルーラの数え方 `$02B3C5` / `$02B3E8` | 「アクティブかつ倒れていない」を生存とする |
-| [#3](https://github.com/jumboly/dq3-monster-arena-simulator/issues/3) | Group 4 の集中攻撃記憶 `$7E2466` の生存確認 | アクティブかつ倒れていなければ有効 |
-| [#20](https://github.com/jumboly/dq3-monster-arena-simulator/issues/20) | 払い戻し式と引き分け時の返金 | 賭け金 × オッズ、引き分けは返金 |
+推測で埋めず、暫定挙動で実装して Issue に残しています（[unknown ラベルの Issue 一覧](https://github.com/jumboly/dq3-monster-arena-simulator/issues?q=label%3Aunknown)。コード・仕様書の `U-xx` は Issue #xx に対応）。
 
 例: 試合 29（ヘルコンドル vs テンタクルス）ではヘルコンドルのバシルーラが勝敗をほぼ決めますが、その成功率（#13 の耐性 1 の値）と、飛ばされた選手を終了判定でどう数えるか（#15）はどちらも未解明です。そのため現状のシミュレーション勝率（約 43%）は、オッズ（8 倍）の想定よりかなり高くなっています。
 
 
 ## Sources
 
-仕様ごとの出典は [`docs/research/battle-spec.md`](docs/research/battle-spec.md)・[`docs/research/arena-spec.md`](docs/research/arena-spec.md) の各節に、アドレス単位で記載しています。
+仕様ごとの出典は [`docs/research/battle-spec.md`](docs/research/battle-spec.md) §0.2・[`docs/research/arena-spec.md`](docs/research/arena-spec.md) の各節に、アドレス単位で記載しています。
 
-| 資料 | URL | 主に確認した仕様 |
-|---|---|---|
-| showa-yojyo/dqbook（プレハブ小屋『ドラクエ解析本』） | https://github.com/showa-yojyo/dqbook / https://showa-yojyo.github.io/dqbook/dq3.html | 構造体定義（モンスター・コマンド・戦闘員・ダメージ）、格闘場の概要 |
-| dq3_C30DC5_matchmake.txt（マッチメイク表） | https://github.com/showa-yojyo/dqbook/blob/master/src/jp/book/data/dq3_C30DC5_matchmake.txt | 38 試合の出場モンスターとオッズ属性値 |
-| dq3_C20000_monsters.txt（モンスター表） | https://github.com/showa-yojyo/dqbook/blob/master/src/jp/book/data/dq3_C20000_monsters.txt | 能力値・コマンド・AI・耐性 |
-| dq3_C21860_commands.txt（コマンド表） | https://github.com/showa-yojyo/dqbook/blob/master/src/jp/book/data/dq3_C21860_commands.txt | 格闘場使用許可フラグ、対象範囲、ダメージ ID |
-| dq3_C23BB4_damage.txt（ダメージ表） | https://github.com/showa-yojyo/dqbook/blob/master/src/jp/book/data/dq3_C23BB4_damage.txt | 呪文・息・回復の基本値 |
-| dqbook: 格闘場 | https://showa-yojyo.github.io/dqbook/dq3_matchmake.html | レベル帯とカード範囲、オッズ計算、賭け金 |
-| RetroGameHackers「DQ3戦闘部分解説」シリーズ（1〜23 と補遺） | https://retrogamehackers.net/dq3-battlesystem-002/ ほか（`-001` 〜 `-026`、`-011-2` 〜 `-011-4`） | 戦闘メインループ、行動順、行動決定、ターゲット、ダメージ式、終了判定、Group 4 |
-| RetroGameHackers「DQ3 戦闘行動の属性IDと耐性」 | https://retrogamehackers.net/dq3-battlesystem-025/ | 系統分類と耐性の対応 |
-| RetroGameHackers 改造記事（耐性・毒・スクルト） | https://retrogamehackers.net/dq3-battlesystem-mod-011/ ほか（mod-016, mod-027, mod-028） | 耐性が確率であること、戦闘中の毒ダメージがないこと、守備力上限 |
-| RetroGameHackers「オリジナルSFC版DQ3小ネタ集」 | https://retrogamehackers.net/dq3-trivia/ | あやしいかげの実体候補 |
-
-- `vendor/dqbook/` に dqbook のデータ表と解説（MIT License）を、コミットを固定して同梱しています（[`vendor/dqbook/SOURCE.md`](vendor/dqbook/SOURCE.md)）。
-- RetroGameHackers の記事はリポジトリに転載していません（`scripts/fetch-research.sh` でローカルに取得できます）。
+- [showa-yojyo/dqbook](https://github.com/showa-yojyo/dqbook)（プレハブ小屋『ドラクエ解析本』）: 構造体定義とデータ表（モンスター・コマンド・ダメージ・マッチメイク）、格闘場の概要。`vendor/dqbook/` にコミットを固定して同梱しています（[`SOURCE.md`](vendor/dqbook/SOURCE.md)、MIT License）。
+- [RetroGameHackers「DQ3戦闘部分解説」シリーズ](https://retrogamehackers.net/dq3-battlesystem-001/)（`-001` 〜 `-026`、補遺 `-011-2` 〜 `-011-4`）と改造記事・[小ネタ集](https://retrogamehackers.net/dq3-trivia/): 戦闘メインループ、行動決定、ターゲット、ダメージ式、終了判定、耐性。記事は転載せず、`scripts/fetch-research.sh` で `-001` 〜 `-026` をローカルに取得できます。
 
 ## Acknowledgements
 

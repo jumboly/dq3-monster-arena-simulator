@@ -9,8 +9,9 @@ import type { BetDecision, BettingAgent, MatchObservation } from './BettingAgent
 import { VercelGatewayClient } from './VercelGatewayClient'
 import type { EvaluateResult } from './VercelGatewayClient'
 import { AiGatewayError } from './errors'
-import { CURRENT_PROMPT } from './prompts'
-import type { ContestantLabel, PromptSet } from './prompts'
+import { JEV_MODEL_ID } from './jevTypes'
+import { DRAW_OPTION, PROMPT_VERSION, buildState, buildWinnerQuestion, contestantLabels } from './prompt'
+import type { ContestantLabel } from './prompt'
 import { restrictAndNormalize, validateChoiceAnswer } from './schemas/evaluateResponse'
 import type { ChoiceAnswer } from './schemas/evaluateResponse'
 import { assertBetDecision } from './schemas/betDecision'
@@ -28,19 +29,6 @@ export interface JevBettingAgentOptions {
   client?: VercelGatewayClient
   strategy?: BetStrategy
   /**
-   * 引き分けを選択肢に含めるか（既定 true）。
-   * 含める理由: 選手しか選べないと、引き分けを予想した場合の確率質量が選手に押し付けられて
-   * 分布が歪む。引き分けの払い戻しは誰に賭けても同じなので、選手間の比較（賭け先の決定）には影響しない。
-   * BetDecision.probabilities は契約どおり引き分けを除いて再正規化し、引き分け確率は meta に残す。
-   */
-  includeDraw?: boolean
-  /** state にオッズを入れるか（既定 true）。オッズに引きずられるかの比較実験用に切れるようにする */
-  includeOdds?: boolean
-  /** 応答の形式不正を何回まで取り直すか。Jev は確率的なので 1 回の取り直しで直ることがある */
-  schemaRetries?: number
-  /** プロンプト版（既定は CURRENT_PROMPT）。版の比較実験用 */
-  prompt?: PromptSet
-  /**
    * 観測上まったく同じ選手（同名・同オッズ・同能力）の勝率を平均する（既定 true）。
    * なぜ: 実測でアルミラージ×4 に対し Jev は 1 番に 12〜22%、2〜4 番に各 1% を付けた（位置バイアス）。
    * 観測が同一なら勝率も同一であるべきで、偏ったまま期待値を取ると番号だけで賭け先が決まってしまう。
@@ -50,28 +38,23 @@ export interface JevBettingAgentOptions {
 
 /** 質問キー。モデルには渡らないので短い固定値で良い */
 const QUESTION_KEY = 'winner'
+/** 応答の形式不正を何回まで取り直すか。Jev は確率的なので 1 回の取り直しで直ることがある */
+const SCHEMA_RETRIES = 1
 
 export class JevBettingAgent implements BettingAgent {
   readonly id = 'jev'
-  readonly label = 'Jev (typesafe-ai/jev)'
+  static readonly label = 'Jev (typesafe-ai/jev)'
+  readonly label = JevBettingAgent.label
 
   private readonly getApiKey: () => string | null
   private readonly client: VercelGatewayClient
   private readonly strategy: BetStrategy
-  private readonly includeDraw: boolean
-  private readonly includeOdds: boolean
-  private readonly schemaRetries: number
-  private readonly prompt: PromptSet
   private readonly symmetrizeIdentical: boolean
 
   constructor(options: JevBettingAgentOptions) {
     this.getApiKey = options.getApiKey
     this.client = options.client ?? new VercelGatewayClient()
     this.strategy = options.strategy ?? 'expected_value'
-    this.includeDraw = options.includeDraw ?? true
-    this.includeOdds = options.includeOdds ?? true
-    this.schemaRetries = Math.max(0, options.schemaRetries ?? 1)
-    this.prompt = options.prompt ?? CURRENT_PROMPT
     this.symmetrizeIdentical = options.symmetrizeIdentical ?? true
   }
 
@@ -82,10 +65,9 @@ export class JevBettingAgent implements BettingAgent {
       throw new AiGatewayError({ kind: 'auth', status: null, attempts: 0, elapsedMs: 0, detail: 'API キーが未設定です' })
     }
 
-    const buildOptions = { includeDraw: this.includeDraw, includeOdds: this.includeOdds }
-    const labels = this.prompt.contestantLabels(observation)
-    const state = this.prompt.buildState(observation, labels, buildOptions)
-    const question = this.prompt.buildWinnerQuestion(labels, buildOptions)
+    const labels = contestantLabels(observation)
+    const state = buildState(observation, labels)
+    const question = buildWinnerQuestion(labels)
     const options = Object.keys(question.criteria)
 
     let result: EvaluateResult | null = null
@@ -94,7 +76,7 @@ export class JevBettingAgent implements BettingAgent {
     let totalElapsed = 0
     let schemaFailures = 0
 
-    for (let i = 0; i <= this.schemaRetries; i++) {
+    for (let i = 0; i <= SCHEMA_RETRIES; i++) {
       // 通信系の失敗（AiGatewayError / AbortError）はクライアント側で再試行済みなのでそのまま投げる
       result = await this.client.evaluate({ state, questions: { [QUESTION_KEY]: question } }, { apiKey, signal })
       totalAttempts += result.attempts
@@ -110,7 +92,7 @@ export class JevBettingAgent implements BettingAgent {
       } catch (e) {
         if (!(e instanceof SchemaError)) throw e
         schemaFailures++
-        if (i === this.schemaRetries) {
+        if (i === SCHEMA_RETRIES) {
           throw new AiGatewayError({
             kind: 'invalid',
             status: 200,
@@ -130,8 +112,8 @@ export class JevBettingAgent implements BettingAgent {
     const decision = this.toDecision(observation, labels, answer)
     decision.meta = {
       ...decision.meta,
-      model: result.model ?? this.client.modelId,
-      promptVersion: this.prompt.version,
+      model: result.model ?? JEV_MODEL_ID,
+      promptVersion: PROMPT_VERSION,
       informationMode: observation.informationMode,
       attempts: totalAttempts,
       schemaFailures,
@@ -152,11 +134,11 @@ export class JevBettingAgent implements BettingAgent {
     labels: ContestantLabel[],
     answer: ChoiceAnswer,
   ): BetDecision {
-    const DRAW_OPTION = this.prompt.drawOption
     const ids = labels.map((l) => l.id)
-    // 選択肢名 → id の写像。label は contestantLabels で一意性を保証済み
+    // 選択肢名 → id の写像。label は contestantLabels で一意性を保証済み。
+    // 契約どおり probabilities は引き分けを除いて再正規化し、引き分け確率は meta に残す
     const jevWin = labels.map((l) => answer.probabilities[l.label] ?? 0)
-    const drawProbability = this.includeDraw ? (answer.probabilities[DRAW_OPTION] ?? 0) : 0
+    const drawProbability = answer.probabilities[DRAW_OPTION] ?? 0
     const sym = this.symmetrizeIdentical ? symmetrize(observation, jevWin) : { values: jevWin, groups: 0, gap: 0 }
     const winByLabel = sym.values
 
@@ -184,7 +166,6 @@ export class JevBettingAgent implements BettingAgent {
       ev,
       best,
       drawProbability,
-      includeDraw: this.includeDraw,
       confidence: answer.confidence,
       strategy: this.strategy,
       normalized: answer.normalized,
@@ -198,7 +179,7 @@ export class JevBettingAgent implements BettingAgent {
       meta: {
         strategy: this.strategy,
         expectedValue: round(ev[best], 3),
-        ...(this.includeDraw ? { drawProbability: round(drawProbability, 4) } : {}),
+        drawProbability: round(drawProbability, 4),
         ...(answer.confidence !== null ? { confidence: answer.confidence } : {}),
         jevChoice: answer.choice === DRAW_OPTION ? 'draw' : (jevChoiceId ?? 'unknown'),
         probabilitySum: round(answer.rawSum, 4),
@@ -255,7 +236,6 @@ interface ReasonInput {
   ev: number[]
   best: number
   drawProbability: number
-  includeDraw: boolean
   confidence: number | null
   strategy: BetStrategy
   normalized: boolean
@@ -264,7 +244,6 @@ interface ReasonInput {
 
 function buildReason(r: ReasonInput): string {
   const dist = r.labels.map((l, i) => `${l.label} ${pct(r.winByLabel[i])}`).join(' / ')
-  const drawPart = r.includeDraw ? ` / 引き分け ${pct(r.drawProbability)}` : ''
   const target = r.labels[r.best].label
   const basis =
     r.strategy === 'expected_value'
@@ -273,5 +252,5 @@ function buildReason(r: ReasonInput): string {
   const conf = r.confidence !== null ? `確信度 ${r.confidence.toFixed(2)}。` : ''
   const norm = r.normalized ? '確率は合計 1 に正規化済み。' : ''
   const sym = r.symmetrized ? '同一の選手どうしの勝率は平均済み。' : ''
-  return `Jev 推定勝率: ${dist}${drawPart}。${conf}${basis}${norm}${sym}※Jev は理由文を生成しないため、この説明は Jev の確率出力から機械的に組み立てたもの。`
+  return `Jev 推定勝率: ${dist} / 引き分け ${pct(r.drawProbability)}。${conf}${basis}${norm}${sym}※Jev は理由文を生成しないため、この説明は Jev の確率出力から機械的に組み立てたもの。`
 }

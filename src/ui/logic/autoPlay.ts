@@ -15,12 +15,12 @@ import type { Prediction } from '../../storage/session'
 import type { ArenaStore } from './arenaStore'
 import { canAfford, currentOffer, slotForDecision } from './arenaFlow'
 import { AUTO_PLAY_MAX_ROUNDS, runAutoPlay as runAiAutoPlay } from '../../ai/autoPlay'
+import { abortError } from '../../ai/errors'
 
 export const AUTO_PLAY_CHOICES = [10, 100, 1000] as const
-/** UI からどんな値が来ても API を叩きすぎないための絶対上限（AI 側ループの上限と揃える） */
-export const AUTO_PLAY_HARD_LIMIT = AUTO_PLAY_MAX_ROUNDS
 
-export type AutoPlayStopReason = 'completed' | 'aborted' | 'no-gold' | 'failures'
+/** 利用者に見せる終了理由。AI 側の停止理由（AutoPlayStopReason）を画面の文言単位にまとめたもの */
+export type AutoPlayEndReason = 'completed' | 'aborted' | 'no-gold' | 'failures'
 
 export interface AutoPlayProgress {
   played: number
@@ -42,10 +42,6 @@ export interface AutoPlayOptions {
   onProgress?: (p: AutoPlayProgress) => void
   /** テストで実時間を待たないため差し替え可能にする（失敗後の待機に使われる） */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
-}
-
-export function isAbortError(e: unknown): boolean {
-  return e instanceof Error && e.name === 'AbortError'
 }
 
 /** エラーを利用者向け文言にする。AI 担当の AiGatewayError は message 自体が分類済みの日本語 */
@@ -84,8 +80,8 @@ export async function askAgent(
   return { obs, decision, slot, prediction: makePrediction(agent, obs, decision, mode) }
 }
 
-export async function runAutoPlay(o: AutoPlayOptions): Promise<{ reason: AutoPlayStopReason; progress: AutoPlayProgress }> {
-  const target = Math.max(0, Math.min(AUTO_PLAY_HARD_LIMIT, Math.floor(o.count)))
+export async function runAutoPlay(o: AutoPlayOptions): Promise<{ reason: AutoPlayEndReason; progress: AutoPlayProgress }> {
+  const target = Math.max(0, Math.min(AUTO_PLAY_MAX_ROUNDS, Math.floor(o.count)))
   const p: AutoPlayProgress = {
     played: 0,
     target,
@@ -105,22 +101,22 @@ export async function runAutoPlay(o: AutoPlayOptions): Promise<{ reason: AutoPla
   const first = prepare()
   if (!first || !canAfford(o.game, first)) return { reason: first ? 'no-gold' : 'aborted', progress: p }
 
-  const res = await runAiAutoPlay<number>({
+  const res = await runAiAutoPlay({
     maxRounds: target,
     maxConsecutiveFailures: o.failureLimit,
     signal: o.signal,
     ...(o.sleep ? { sleep: o.sleep } : {}),
     playRound: async ({ signal }) => {
       const s = prepare()
-      if (!s) throw abortErr()
+      if (!s) throw abortError(signal)
       const offer = currentOffer(o.game, s)
       const { slot, prediction } = await askAgent(o.game, o.agent, offer, s.informationMode, signal)
       // 応答待ちの間に Stop されたら、届いた予測で賭けない（利用者の意図は「これ以上賭けない」）
-      if (signal?.aborted) throw abortErr()
+      if (signal?.aborted) throw abortError(signal)
       const { session } = o.store.bet(slot, { prediction, auto: true })
       // 即時に解決するエージェントでも描画の機会を与えるため 1 tick 譲る
       await new Promise((r) => setTimeout(r, 0))
-      return { value: slot, stop: !canAfford(o.game, session) }
+      return { stop: !canAfford(o.game, session) }
     },
     onEvent: (ev) => {
       if (ev.type === 'round_completed') {
@@ -138,7 +134,7 @@ export async function runAutoPlay(o: AutoPlayOptions): Promise<{ reason: AutoPla
     },
   })
   p.waitingMs = null
-  const reason: AutoPlayStopReason =
+  const reason: AutoPlayEndReason =
     res.stopReason === 'max_rounds' || res.roundsCompleted >= target
       ? 'completed'
       : res.stopReason === 'aborted'
@@ -147,10 +143,4 @@ export async function runAutoPlay(o: AutoPlayOptions): Promise<{ reason: AutoPla
           ? 'no-gold'
           : 'failures'
   return { reason, progress: { ...p } }
-}
-
-function abortErr(): Error {
-  const e = new Error('中断されました')
-  e.name = 'AbortError'
-  return e
 }

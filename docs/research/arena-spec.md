@@ -1,6 +1,6 @@
 # SFC版DQ3 格闘場（窓口・マッチメイク・オッズ・配当）仕様書
 
-戦闘そのものは `battle-spec.md`、未解明項目は `unknowns.md` を参照。ラベルと出典略記は `battle-spec.md` §0 と同じ。
+戦闘そのものは `battle-spec.md`、未解明項目は GitHub Issue（U-xx = Issue #xx、`unknown` ラベル）を参照。ラベルと出典略記は `battle-spec.md` §0 と同じ。
 
 **前提**: 格闘場の窓口・マッチメイク処理はバンク `$03` にあり（`$C3EC84`, `$C3EE64`, `$C3EFBE`）、**逆アセンブルは公開されていない**。公開されているのは dqbook-matchmake の要点の文章と、試合データ `$C30DC5` のダンプだけ。したがって本書の多くは Likely / Unknown になる。
 

@@ -3,7 +3,7 @@
  *
  * 設計方針:
  * - SFC 版は通常戦・イベント戦・格闘場が同一のメインループ $0259F5 を共有する（battle-spec §1.1, Confirmed）。
- *   そのためループ本体は共通に書き、格闘場の差分は BattleMode（arena）で分岐する（§1.2 の表の各箇所）。
+ *   ここでは格闘場モードだけを実装し、通常戦との差分箇所（§1.2 の表）は格闘場側の挙動に固定してコメントで示す。
  * - 仕様書の Confirmed / Likely はその通りに、Unknown は仕様書の「暫定挙動」を採り、分岐を通るたびに
  *   fidelityHits['U-xx'] を加算する。仕様に無いことは補完しない（補完が避けられない所はコメントで明示）。
  * - 乱数は RomRandom（ROM の呼び出し口と 1 対 1）経由でのみ引き、消費順を §9 に合わせる。
@@ -38,7 +38,6 @@ import type {
   ArenaEndType,
   BattleEngine,
   BattleLogEntry,
-  BattleMode,
   BattleOutcome,
   BattleResult,
   CombatantState,
@@ -47,7 +46,6 @@ import type {
 
 /** 格闘場のターン上限（$02A48C, battle-spec §8.3, Confirmed）。通常戦は 65535 */
 const ARENA_TURN_LIMIT = 10
-const NORMAL_TURN_LIMIT = 65535
 /** 戦闘員の最大数（インデックス 0..23） */
 const MAX_COMBATANTS = 24
 /** MP 属性 255 は「MP が減らない」マジックナンバー（battle-spec §2.2, Likely） */
@@ -128,8 +126,7 @@ export class DQ3BattleEngine implements BattleEngine {
   }
 
   runArena(setup: ArenaBattleSetup, rng: RandomSource): BattleResult {
-    const mode: BattleMode = { kind: 'arena', betSlot: setup.betSlot }
-    return new BattleRun(this.data, mode, setup, rng).run()
+    return new BattleRun(this.data, setup, rng).run()
   }
 }
 
@@ -206,18 +203,12 @@ class BattleRun {
   /** 手番順（$0263A2 → $025DAC） */
   private order: number[] = []
   private readonly data: DataAccess
-  private readonly mode: BattleMode
   private readonly setup: ArenaBattleSetup
 
-  constructor(data: DataAccess, mode: BattleMode, setup: ArenaBattleSetup, rng: RandomSource) {
+  constructor(data: DataAccess, setup: ArenaBattleSetup, rng: RandomSource) {
     this.data = data
-    this.mode = mode
     this.setup = setup
     this.rng = new RomRandom(rng)
-  }
-
-  private get isArena(): boolean {
-    return this.mode.kind === 'arena'
   }
 
   // ─────────────────────────────── 共通ユーティリティ ───────────────────────────────
@@ -322,7 +313,7 @@ class BattleRun {
     if (monsterIds.length < 1 || monsterIds.length > 4) {
       throw new RangeError(`格闘場の出場数は 1..4（got ${monsterIds.length}）`)
     }
-    const bet = this.mode.betSlot
+    const bet = this.setup.betSlot
     if (bet !== null && (!Number.isInteger(bet) || bet < 0 || bet >= monsterIds.length)) {
       throw new RangeError(`betSlot ${bet} は出場スロット 0..${monsterIds.length - 1} の範囲外`)
     }
@@ -344,17 +335,15 @@ class BattleRun {
     }
 
     // $025B8B → $025C61 賭けた選手を Group 4 へ（§2.3, Confirmed）
-    if (this.isArena) {
-      if (bet === null) {
-        // P-10: 賭けなし観戦は SFC に存在しない。Group 4 なしで走らせる
-        this.hit('no-bet-mode')
-      } else {
-        for (let x = MAX_COMBATANTS - 1; x >= 0; x--) {
-          const f = this.fighters[x]
-          if (f && f.s.active && f.s.groupId === bet) {
-            f.s.groupId = 4
-            f.s.isBetTarget = true
-          }
+    if (bet === null) {
+      // P-10: 賭けなし観戦は SFC に存在しない。Group 4 なしで走らせる
+      this.hit('no-bet-mode')
+    } else {
+      for (let x = MAX_COMBATANTS - 1; x >= 0; x--) {
+        const f = this.fighters[x]
+        if (f && f.s.active && f.s.groupId === bet) {
+          f.s.groupId = 4
+          f.s.isBetTarget = true
         }
       }
     }
@@ -373,7 +362,7 @@ class BattleRun {
         ]),
       ),
       internal: {
-        mode: this.mode.kind,
+        mode: 'arena',
         betSlot: bet === null ? 'null' : bet,
         // あやしいかげの実体は Hidden。Simple には出さず Internal だけに残す（§2.4）
         ...Object.fromEntries(
@@ -635,7 +624,7 @@ class BattleRun {
     const cmd = this.data.command(cmdId)
     // 格闘場では「格闘場使用許可」0 のコマンドを選択不可にする（§1.2 #5, Confirmed）。
     // gameData.toArenaCommandId の「通常攻撃へ置換」は使わない（置換ではなく除外して再抽選: §4.3）
-    if (this.isArena && !cmd.flags.arenaAllowed) return { ok: false }
+    if (!cmd.flags.arenaAllowed) return { ok: false }
     const sj = f.def.selectionJudgment
     const cost = cmd.mp
     if (sj === 1) {
@@ -804,7 +793,7 @@ class BattleRun {
       // $0273A1 / $02B0D0: 途中で死亡・離脱した戦闘員は行動順から外れる（Confirmed）
       if (!f || !this.isAlive(f)) continue
       // $027329「格闘場中断処理?」: U-21 暫定で常に c=off
-      if (this.isArena) this.hit('U-21')
+      this.hit('U-21')
       for (let k = 0; k < 3; k++) {
         if (k === 0 && f.s.sleepCounter > 0) this.tickSleep(f)
         // $0273B3 行動可能チェック: U-21 暫定で「非アクティブ・死亡・マヒ・眠り・休み」ならスキップ
@@ -1543,13 +1532,9 @@ class BattleRun {
     const alive = this.all.filter((f) => this.isAlive(f))
     const sideA = alive.some((f) => f.s.groupId <= 3) // $02B3C5: Group 0-3（Likely）
     const sideB = alive.some((f) => f.s.groupId >= 4) // $02B3E8: Group ≥ 4（Likely）
-    let x: number
-    if (!sideA) x = 0
-    else if (!sideB) x = 2
-    else return false
-    if (this.isArena) x += 1
-    this.endType = [1, 5, 2, 6][x]
-    if (!this.isArena) return true
+    if (sideA && sideB) return false
+    // 表 [1, 5, 2, 6] の格闘場側（通常戦は 1 / 2）: 陣営 A 全滅 → 5（当たり）、陣営 B 全滅 → 6（ハズレ）
+    this.endType = sideA ? 6 : 5
     const n = alive.length
     if (n === 0) {
       this.endType = 7
@@ -1562,13 +1547,9 @@ class BattleRun {
   /** $02A48C（§8.3）。c=on（終了）で true */
   private checkTurnLimit(): boolean {
     this.elapsedTurns += 1
-    const limit = this.isArena ? ARENA_TURN_LIMIT : NORMAL_TURN_LIMIT
-    if (this.elapsedTurns >= limit) {
-      if (this.isArena) {
-        if ((this.endType & 0x0f) === 0) this.endType = 7
-      } else {
-        this.endType = 4
-      }
+    if (this.elapsedTurns >= ARENA_TURN_LIMIT) {
+      // 通常戦はここでタイプ 4 になるが、格闘場は未決着なら引き分け（7）
+      if ((this.endType & 0x0f) === 0) this.endType = 7
       return true
     }
     return false

@@ -12,7 +12,6 @@
 import type { ArenaGame } from '../../core/arena/ArenaGame'
 import {
   loadSettings,
-  migrateLegacyStorage,
   saveHistory,
   type HistoryEntry,
   type Prediction,
@@ -55,7 +54,6 @@ export class ArenaStore {
   constructor(game: ArenaGame, stores: Stores) {
     this.game = game
     this.stores = stores
-    const migration = migrateLegacyStorage(stores)
     const books = stores.sessions.load() ?? []
     const activeId = stores.activeSessionId.load()
     const session = books.find((b) => b.id === activeId) ?? null
@@ -64,10 +62,7 @@ export class ArenaStore {
       session,
       history: session ? this.loadHistory(session.id) : [],
       settings: loadSettings(stores),
-      storageWarning:
-        migration.status === 'failed'
-          ? `以前のセッションを冒険の書へ移せませんでした（${this.reasonText(migration.result)}）。元のデータは残っています。`
-          : null,
+      storageWarning: null,
     }
   }
 
@@ -81,10 +76,6 @@ export class ArenaStore {
   private set(patch: Partial<ArenaState>) {
     this.state = { ...this.state, ...patch }
     for (const fn of this.listeners) fn()
-  }
-
-  private reasonText(r: SaveResult): string {
-    return r.ok ? '' : r.reason === 'quota' ? '保存容量が不足' : 'ストレージが使えない'
   }
 
   private warn(what: string, r: SaveResult): string | null {

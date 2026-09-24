@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { API_KEY_STORAGE_KEY, clearApiKey, hasApiKey, loadApiKey, maskApiKey, saveApiKey } from '../../src/storage/apiKey'
+import { API_KEY_STORAGE_KEY, clearApiKey, hasApiKey, loadApiKey, saveApiKey } from '../../src/storage/apiKey'
 import type { KeyValueStorage } from '../../src/storage/apiKey'
 import { FAKE_KEY } from './fixtures'
 
@@ -56,13 +56,5 @@ describe('apiKey storage', () => {
     // 実行環境の localStorage を汚さないため読み出しだけ確かめる
     expect(() => loadApiKey()).not.toThrow()
     expect(() => hasApiKey()).not.toThrow()
-  })
-
-  it('maskApiKey は末尾 4 文字以外を見せない', () => {
-    const m = maskApiKey(FAKE_KEY)
-    expect(m).toBe('••••7890')
-    expect(m).not.toContain('TEST_SECRET')
-    expect(maskApiKey('short')).toBe('••••')
-    expect(maskApiKey(null)).toBe('')
   })
 })

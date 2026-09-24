@@ -13,13 +13,3 @@ export type Fidelity =
   | 'approximation'
   /** 未解明。推測で補完せず、暫定挙動を明記して Issue に残す */
   | 'unknown'
-
-export interface FidelityNote {
-  id: string
-  fidelity: Fidelity
-  summary: string
-  /** 出典（URL と節・アドレス） */
-  sources: string[]
-  /** unknown の場合の GitHub Issue 番号など */
-  issue?: string
-}

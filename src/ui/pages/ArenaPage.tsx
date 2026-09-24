@@ -15,7 +15,8 @@ import { isAiGatewayError } from '../../ai/errors'
 import { Window } from '../components/Window'
 import { useArenaDeps, useArenaState, useAutoPlayState } from '../hooks/arenaContext'
 import { canAfford, currentOffer, predictionBySlot, winnerSlotOf } from '../logic/arenaFlow'
-import { askAgent, describeError, isAbortError } from '../logic/autoPlay'
+import { isAbortError } from '../../ai/errors'
+import { askAgent, describeError } from '../logic/autoPlay'
 import { formatGold } from '../logic/format'
 
 export function ArenaPage({ session, onNewSession }: { session: Session; onNewSession: () => void }) {

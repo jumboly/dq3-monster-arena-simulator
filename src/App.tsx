@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useArenaDeps, useArenaState, useAutoPlayState } from './ui/hooks/arenaContext'
-import { ARENA_GAME_IS_MOCK } from './ui/arenaGameProvider'
 import { formatGold } from './ui/logic/format'
 import { AnalysisPage } from './ui/pages/AnalysisPage'
 import { ArenaPage } from './ui/pages/ArenaPage'
@@ -95,11 +94,6 @@ export default function App() {
         </nav>
       </header>
 
-      {ARENA_GAME_IS_MOCK && (
-        <p className="notice warn small">
-          開発用モック: 戦闘・マッチメイク・オッズは仮実装（ダミー）です。実機の再現ではありません。
-        </p>
-      )}
       {storageWarning && (
         <div className="notice error small">
           {storageWarning}{' '}

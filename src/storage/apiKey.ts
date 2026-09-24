@@ -63,12 +63,3 @@ export function clearApiKey(storage: KeyValueStorage | null = defaultStorage()):
 export function hasApiKey(storage: KeyValueStorage | null = defaultStorage()): boolean {
   return loadApiKey(storage) !== null
 }
-
-/**
- * 画面表示用の伏せ字。末尾 4 文字だけ見せ、どのキーを入れたかを利用者が確認できるようにする。
- * 短いキーは末尾を見せると推測されやすいので全部伏せる。
- */
-export function maskApiKey(key: string | null): string {
-  if (!key) return ''
-  return key.length <= 12 ? '••••' : `••••${key.slice(-4)}`
-}

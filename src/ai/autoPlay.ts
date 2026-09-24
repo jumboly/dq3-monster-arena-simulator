@@ -22,8 +22,7 @@ export interface RoundContext {
   signal?: AbortSignal
 }
 
-export interface RoundOutcome<T> {
-  value: T
+export interface RoundOutcome {
   /** 所持金不足などゲーム側の理由で打ち切るとき true */
   stop?: boolean
 }
@@ -37,76 +36,60 @@ export type AutoPlayStopReason =
   /** playRound が stop を返した */
   | 'requested'
 
-export type AutoPlayEvent<T> =
-  | { type: 'round_completed'; round: number; value: T }
+export type AutoPlayEvent =
+  | { type: 'round_completed'; round: number }
   | { type: 'round_failed'; round: number; attempt: number; error: unknown; consecutiveFailures: number }
   | { type: 'waiting'; round: number; waitMs: number; reason: 'rate_limit' | 'backoff' }
 
-export interface AutoPlayOptions<T> {
+export interface AutoPlayOptions {
   maxRounds: number
-  playRound: (ctx: RoundContext) => Promise<RoundOutcome<T>>
+  playRound: (ctx: RoundContext) => Promise<RoundOutcome>
   signal?: AbortSignal
   /** この回数だけ連続で失敗したら止める。一時障害が長引くときに呼び出しを積み増さないため */
   maxConsecutiveFailures?: number
-  /** Retry-After が無い 429 の待ち。Jev の実測 Retry-After が約 50 秒なので 60 秒 */
-  defaultRateLimitWaitMs?: number
   /** Retry-After が異常に長くても UI が固まり続けないよう上限を設ける */
   maxRateLimitWaitMs?: number
   /** レート制限以外の失敗後、次の挑戦までの待ち */
   failureBackoffMs?: number
-  onEvent?: (event: AutoPlayEvent<T>) => void
+  onEvent?: (event: AutoPlayEvent) => void
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
 }
 
-export interface AutoPlayResult<T> {
+export interface AutoPlayResult {
   roundsCompleted: number
   stopReason: AutoPlayStopReason
-  values: T[]
-  totalFailures: number
-  rateLimitWaits: number
-  lastError?: unknown
 }
 
-export async function runAutoPlay<T>(options: AutoPlayOptions<T>): Promise<AutoPlayResult<T>> {
+/** Retry-After が無い 429 の待ち。Jev の実測 Retry-After が約 50 秒なので 60 秒 */
+const DEFAULT_RATE_LIMIT_WAIT_MS = 60_000
+
+export async function runAutoPlay(options: AutoPlayOptions): Promise<AutoPlayResult> {
   const maxRounds = Math.max(0, Math.min(AUTO_PLAY_MAX_ROUNDS, Math.floor(options.maxRounds)))
   const maxConsecutiveFailures = Math.max(1, options.maxConsecutiveFailures ?? 3)
-  const defaultRateLimitWaitMs = options.defaultRateLimitWaitMs ?? 60_000
   const maxRateLimitWaitMs = options.maxRateLimitWaitMs ?? 120_000
   const failureBackoffMs = options.failureBackoffMs ?? 2_000
   const sleep = options.sleep ?? defaultSleep
   const { signal, onEvent } = options
 
-  const values: T[] = []
-  let totalFailures = 0
-  let rateLimitWaits = 0
+  let roundsCompleted = 0
   let consecutiveFailures = 0
   let attempt = 1
-  let lastError: unknown
 
-  const done = (stopReason: AutoPlayStopReason): AutoPlayResult<T> => ({
-    roundsCompleted: values.length,
-    stopReason,
-    values,
-    totalFailures,
-    rateLimitWaits,
-    ...(lastError !== undefined ? { lastError } : {}),
-  })
+  const done = (stopReason: AutoPlayStopReason): AutoPlayResult => ({ roundsCompleted, stopReason })
 
-  while (values.length < maxRounds) {
+  while (roundsCompleted < maxRounds) {
     if (signal?.aborted) return done('aborted')
-    const round = values.length
+    const round = roundsCompleted
     try {
       const outcome = await options.playRound({ round, attempt, signal })
-      values.push(outcome.value)
+      roundsCompleted++
       consecutiveFailures = 0
       attempt = 1
-      onEvent?.({ type: 'round_completed', round, value: outcome.value })
+      onEvent?.({ type: 'round_completed', round })
       if (outcome.stop) return done('requested')
       continue
     } catch (error) {
       if (isAbortError(error) || signal?.aborted) return done('aborted')
-      lastError = error
-      totalFailures++
       consecutiveFailures++
       onEvent?.({ type: 'round_failed', round, attempt, error, consecutiveFailures })
 
@@ -115,9 +98,8 @@ export async function runAutoPlay<T>(options: AutoPlayOptions<T>): Promise<AutoP
 
       const isRateLimit = isAiGatewayError(error) && error.kind === 'rate_limit'
       const waitMs = isRateLimit
-        ? Math.min(maxRateLimitWaitMs, (isAiGatewayError(error) ? error.retryAfterMs : null) ?? defaultRateLimitWaitMs)
+        ? Math.min(maxRateLimitWaitMs, error.retryAfterMs ?? DEFAULT_RATE_LIMIT_WAIT_MS)
         : failureBackoffMs
-      if (isRateLimit) rateLimitWaits++
       onEvent?.({ type: 'waiting', round, waitMs, reason: isRateLimit ? 'rate_limit' : 'backoff' })
       try {
         await sleep(waitMs, signal)

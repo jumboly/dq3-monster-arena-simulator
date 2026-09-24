@@ -37,7 +37,7 @@ describe('スモーク（試合 1〜37）', () => {
         }
       }
     }
-    // 試合 1〜37 の実効コマンドはすべて実装済み（effective-commands-1-37.md）
+    // 試合 1〜37 に出る実効コマンドはすべて実装済み。未実装の分岐に入ったらここで気付けるようにする
     expect([...unimplemented]).toEqual([])
     const avgTurns = turns / total
     expect(avgTurns).toBeGreaterThan(2)

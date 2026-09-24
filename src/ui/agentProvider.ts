@@ -28,20 +28,18 @@ const STRATEGY: Record<JevPolicy, BetStrategy> = {
   'max-win': 'max_probability',
 }
 
-const MOCK_LABEL = 'Mock Jev（オッズ逆数ベースライン）'
-
 export function agentAvailability(req: Pick<AgentRequest, 'forceMock'> = {}): AgentAvailability {
   if (req.forceMock) {
-    return { kind: 'mock', label: MOCK_LABEL, note: 'Settings でモックエージェントが選ばれています（API は呼びません）。' }
+    return { kind: 'mock', label: MockBettingAgent.label, note: 'Settings でモックエージェントが選ばれています（API は呼びません）。' }
   }
   if (!hasApiKey()) {
     return {
       kind: 'mock',
-      label: MOCK_LABEL,
+      label: MockBettingAgent.label,
       note: 'API キーが未設定のため、モックエージェントで動作しています（Settings でキーを保存すると Jev を使います）。',
     }
   }
-  return { kind: 'jev', label: 'Jev (typesafe-ai/jev)', note: 'Vercel AI Gateway 経由で Jev を呼び出します。' }
+  return { kind: 'jev', label: JevBettingAgent.label, note: 'Vercel AI Gateway 経由で Jev を呼び出します。' }
 }
 
 export function createBettingAgent(req: AgentRequest): BettingAgent {

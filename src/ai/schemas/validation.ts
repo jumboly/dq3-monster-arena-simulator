@@ -5,12 +5,9 @@
  * 依存追加（静的サイトのバンドル増）に見合わない。失敗箇所を JSON パスで示せば十分に追える。
  */
 export class SchemaError extends Error {
-  readonly path: string
-
   constructor(path: string, message: string) {
     super(`Jev 応答の形式が想定と違います (${path}): ${message}`)
     this.name = 'SchemaError'
-    this.path = path
   }
 }
 

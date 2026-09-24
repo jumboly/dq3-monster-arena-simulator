@@ -27,19 +27,6 @@ describe('createVersionedStore', () => {
     expect(store.load()).toBeNull()
   })
 
-  it('migrate で旧バージョンを移行できる', () => {
-    const storage = new MemoryStorage()
-    storage.setItem('dq3arena.n', '{"v":1,"data":"7"}')
-    const store = createVersionedStore({
-      key: 'n',
-      version: 2,
-      validate: isNum,
-      storage,
-      migrate: (v, d) => (v === 1 ? Number(d) : null),
-    })
-    expect(store.load()).toBe(7)
-  })
-
   it('ストレージが例外を投げても落ちない', () => {
     const throwing: KeyValueStorage = {
       getItem: () => {
@@ -77,11 +64,13 @@ function entry(round: number, withLog = true): HistoryEntry {
     goldBefore: 10000,
     goldAfter: 9700,
     battleSeed: round,
-    summary: { outcome: { kind: 'winner', slot: 1, turn: 3 }, turns: 3, fidelityHits: {} },
+    endType: 6,
+    drawPolicy: 'refund',
+    summary: { outcome: { kind: 'winner', slot: 1, turn: 3, endType: 6 }, turns: 3, fidelityHits: {} },
     ...(withLog
       ? {
           battle: {
-            outcome: { kind: 'winner', slot: 1, turn: 3 },
+            outcome: { kind: 'winner', slot: 1, turn: 3, endType: 6 },
             turns: 3,
             log: [{ turn: 1, kind: 'note', simple: 'x'.repeat(200) }],
             finalStates: [],

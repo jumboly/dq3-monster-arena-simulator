@@ -7,12 +7,12 @@
 import type { ArenaGame } from '../../core/arena/ArenaGame'
 import type { BettingAgent } from '../../ai/BettingAgent'
 import type { ArenaStore } from './arenaStore'
-import { runAutoPlay, type AutoPlayProgress, type AutoPlayStopReason } from './autoPlay'
+import { runAutoPlay, type AutoPlayProgress, type AutoPlayEndReason } from './autoPlay'
 
 export interface AutoPlayState {
   running: boolean
   progress: AutoPlayProgress | null
-  lastStop: { reason: AutoPlayStopReason; progress: AutoPlayProgress; agentLabel: string } | null
+  lastStop: { reason: AutoPlayEndReason; progress: AutoPlayProgress; agentLabel: string } | null
 }
 
 export class AutoPlayController {

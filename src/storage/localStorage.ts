@@ -4,8 +4,8 @@
  * - プライベートブラウズ・容量超過・ストレージ無効化で例外が出てもアプリを落とさないため、
  *   すべての読み書きを try/catch で包み、失敗は戻り値で返す。
  * - 保存形式を後から変えても古いデータで壊れないよう、値は `{ v, data }` の
- *   エンベロープに入れてスキーマバージョンを持たせる。バージョン不一致は migrate に任せ、
- *   migrate できなければ「無かったこと」にする（壊れた値で起動不能になるより安全）。
+ *   エンベロープに入れてスキーマバージョンを持たせる。バージョン不一致は「無かったこと」にする
+ *   （壊れた値で起動不能になるより安全）。移行が必要になったらその時に足す。
  */
 
 /** テストでメモリ実装に差し替えられるよう、Storage の必要最小限だけに依存する */
@@ -29,8 +29,6 @@ export interface VersionedStoreOptions<T> {
   version: number
   /** 読み込んだ値の最低限の形チェック。外部から改変されうるため型アサーションだけに頼らない */
   validate: (data: unknown) => data is T
-  /** 旧バージョンからの移行。未定義または null を返すと破棄 */
-  migrate?: (fromVersion: number, data: unknown) => T | null
   storage?: KeyValueStorage
 }
 
@@ -84,12 +82,8 @@ export function createVersionedStore<T>(opts: VersionedStoreOptions<T>): Version
       } catch {
         return null
       }
-      if (typeof env !== 'object' || env === null || typeof env.v !== 'number') return null
-      if (env.v === opts.version) {
-        return opts.validate(env.data) ? env.data : null
-      }
-      const migrated = opts.migrate?.(env.v, env.data) ?? null
-      return migrated !== null && opts.validate(migrated) ? migrated : null
+      if (typeof env !== 'object' || env === null || env.v !== opts.version) return null
+      return opts.validate(env.data) ? env.data : null
     },
     save(data) {
       const s = storage()

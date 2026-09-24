@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useArenaDeps, useArenaState, useAutoPlayState } from '../hooks/arenaContext'
-import { AUTO_PLAY_CHOICES, type AutoPlayStopReason } from '../logic/autoPlay'
+import { AUTO_PLAY_CHOICES, type AutoPlayEndReason } from '../logic/autoPlay'
 import { formatGold } from '../logic/format'
 import { agentAvailability, createBettingAgent } from '../agentProvider'
 import { ConfirmDialog } from './Modal'
 import { Window } from './Window'
 
-const STOP_MESSAGES: Record<AutoPlayStopReason, string> = {
+const STOP_MESSAGES: Record<AutoPlayEndReason, string> = {
   completed: '指定回数を終えました',
   aborted: '停止しました',
   'no-gold': '所持金が賭け金に足りなくなったため停止しました',

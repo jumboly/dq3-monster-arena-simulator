@@ -3,15 +3,14 @@ import { JevBettingAgent, symmetrize } from '../../src/ai/JevBettingAgent'
 import type { BetStrategy } from '../../src/ai/JevBettingAgent'
 import { VercelGatewayClient } from '../../src/ai/VercelGatewayClient'
 import { AiGatewayError } from '../../src/ai/errors'
-import { CURRENT_PROMPT, DRAW_OPTION, PROMPTS } from '../../src/ai/prompts'
-import type { PromptSet } from '../../src/ai/prompts'
+import { DRAW_OPTION, PROMPT_VERSION, buildState, contestantLabels } from '../../src/ai/prompt'
 import type { MatchObservation } from '../../src/ai/BettingAgent'
 import { FAKE_KEY, almirajMatch, choiceBody, mockFetch, noSleep, slimeMatch } from './fixtures'
 import type { MockResponse } from './fixtures'
 
 function agent(
   responses: MockResponse[],
-  opts: { strategy?: BetStrategy; includeDraw?: boolean; includeOdds?: boolean; key?: string | null; symmetrizeIdentical?: boolean } = {},
+  opts: { strategy?: BetStrategy; key?: string | null; symmetrizeIdentical?: boolean } = {},
 ) {
   const m = mockFetch(responses)
   const client = new VercelGatewayClient({ fetch: m.fn, sleep: noSleep })
@@ -19,8 +18,6 @@ function agent(
     getApiKey: () => (opts.key === undefined ? FAKE_KEY : opts.key),
     client,
     strategy: opts.strategy,
-    includeDraw: opts.includeDraw,
-    includeOdds: opts.includeOdds,
     symmetrizeIdentical: opts.symmetrizeIdentical,
   })
   return { a, calls: m.calls }
@@ -101,13 +98,6 @@ describe('JevBettingAgent', () => {
     expect(d.reason).toContain('正規化')
   })
 
-  it('includeDraw=false なら引き分けを選択肢に含めない', async () => {
-    const { a, calls } = agent([{ status: 200, body: choiceBody({ '1番 スライム': 1 }) }], { includeDraw: false })
-    const d = await a.decide(slimeMatch())
-    expect(Object.keys(sentBody(calls).questions.winner.criteria)).not.toContain(DRAW_OPTION)
-    expect(d.meta?.drawProbability).toBeUndefined()
-  })
-
   it('reason は確率から組み立てたもので、Jev が理由文を生成しない旨を明示する', async () => {
     const d = await agent([{ status: 200, body: choiceBody({ '1番 スライム': 1 }) }]).a.decide(slimeMatch())
     expect(d.reason).toContain('Jev は理由文を生成しない')
@@ -117,7 +107,7 @@ describe('JevBettingAgent', () => {
   it('meta にモデル・プロンプト版・試行回数を残し、キーは含めない', async () => {
     const d = await agent([{ status: 503 }, { status: 200, body: choiceBody({ '1番 スライム': 1 }) }]).a.decide(slimeMatch())
     expect(d.meta?.model).toBe('typesafe-ai/jev')
-    expect(d.meta?.promptVersion).toBe(CURRENT_PROMPT.version)
+    expect(d.meta?.promptVersion).toBe(PROMPT_VERSION)
     expect(d.meta?.attempts).toBe(2)
     expect(JSON.stringify(d)).not.toContain(FAKE_KEY)
   })
@@ -154,8 +144,7 @@ describe('JevBettingAgent', () => {
   })
 })
 
-describe.each(Object.values(PROMPTS).map((p) => [p.version, p] as [string, PromptSet]))('prompt state %s (Classic / Analyst)', (_v, prompt) => {
-  const { buildState, contestantLabels } = prompt
+describe('prompt state (Classic / Analyst)', () => {
   const analyst: MatchObservation = {
     ...slimeMatch('analyst'),
     contestants: slimeMatch('analyst').contestants.map((c) => ({
@@ -168,37 +157,30 @@ describe.each(Object.values(PROMPTS).map((p) => [p.version, p] as [string, Promp
 
   it('Classic は名前とオッズだけ（能力値を含めない）', () => {
     const obs = { ...analyst, informationMode: 'classic' as const }
-    const s = buildState(obs, contestantLabels(obs), { includeOdds: true, includeDraw: true }) as { contestants: Array<Record<string, unknown>> }
+    const s = buildState(obs, contestantLabels(obs)) as { contestants: Array<Record<string, unknown>> }
     expect(Object.keys(s.contestants[0]).sort()).toEqual(['label', 'name', 'odds'])
   })
 
   it('Analyst は能力値・行動・AI を含める', () => {
-    const s = buildState(analyst, contestantLabels(analyst), { includeOdds: true, includeDraw: true }) as { contestants: Array<Record<string, unknown>> }
+    const s = buildState(analyst, contestantLabels(analyst)) as { contestants: Array<Record<string, unknown>> }
     expect(s.contestants[0]).toHaveProperty('stats')
     expect(s.contestants[0]).toHaveProperty('actions')
     expect(s.contestants[0]).toHaveProperty('ai')
   })
 
-  it('includeOdds=false ならオッズを渡さない', () => {
-    const obs = slimeMatch()
-    const s = buildState(obs, contestantLabels(obs), { includeOdds: false, includeDraw: true })
-    expect(JSON.stringify(s)).not.toContain('odds')
-  })
-
   it('賭け金・主人公レベル・id は state に入れない', () => {
     const obs = slimeMatch()
-    const text = JSON.stringify(buildState(obs, contestantLabels(obs), { includeOdds: true, includeDraw: true }))
+    const text = JSON.stringify(buildState(obs, contestantLabels(obs)))
     expect(text).not.toContain('stake')
     expect(text).not.toContain('heroLevel')
     expect(text).not.toContain('monster-')
   })
 })
 
-describe('prompt v2', () => {
-  it('同名の規則文を「別個体として戦う」に置き換えている', () => {
-    const p = PROMPTS['jev-bet/v2']
+describe('prompt', () => {
+  it('同名の選手を「別個体として戦う」と説明する（v1 の「番号だけが区別」は引き分けに偏らせた）', () => {
     const obs = almirajMatch()
-    const text = JSON.stringify(p.buildState(obs, p.contestantLabels(obs), { includeOdds: true, includeDraw: true }))
+    const text = JSON.stringify(buildState(obs, contestantLabels(obs)))
     expect(text).toContain('別々の個体')
     expect(text).not.toContain('番号だけが区別')
   })

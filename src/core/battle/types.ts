@@ -2,17 +2,13 @@
  * Battle Core の入出力契約。React から独立しており、UI・AI・Monte Carlo すべてが
  * この型だけを介して戦闘を扱う。
  *
- * 設計: 格闘場専用エンジンではなく「DQ3BattleEngine + ArenaMode」。
- * SFC 版は通常戦・イベント戦・格闘場が同一の戦闘メインループ（$0259F5）を共有するため、
- * モード差分は BattleMode で分岐させ、ループ本体は共通にする。
+ * SFC 版は通常戦・イベント戦・格闘場が同一の戦闘メインループ（$0259F5）を共有するが、
+ * このエンジンが実装するのは格闘場モードだけ（通常戦との差分は DQ3BattleEngine のコメント参照）。
  */
 import type { RandomSource } from '../rng/RandomSource'
 
-export type BattleMode = { kind: 'arena'; betSlot: number | null }
-
 /** グループ ID。0..3: 敵陣グループ, 4: 格闘場で賭けた選手のグループ, 5: 自陣（PC） */
 export type GroupId = 0 | 1 | 2 | 3 | 4 | 5
-export const BET_GROUP: GroupId = 4
 
 /**
  * 戦闘員の実行時状態。

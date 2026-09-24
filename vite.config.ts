@@ -6,7 +6,7 @@ export default defineConfig({
   base: process.env.GITHUB_PAGES === 'true' ? '/dq3-monster-arena-simulator/' : '/',
   plugins: [react()],
   test: {
-    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    include: ['tests/**/*.test.ts'],
     environment: 'node',
   },
 })
