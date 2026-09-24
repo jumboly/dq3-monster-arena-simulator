@@ -1,0 +1,492 @@
+<meta charset="utf-8">
+<title>格闘場タイムライン</title>
+<style>
+/* 本体アプリ（src/index.css）と同じトークン・同じ二重枠ウィンドウに揃え、実装後の見た目に近づける */
+:root {
+  --bg: #07071a;
+  --win-bg: #000;
+  --fg: #f4f4f4;
+  --muted: #a3a3b8;
+  --border: #f4f4f4;
+  --accent: #ffd84a;
+  --win: #7cf29a;
+  --lose: #ff7b7b;
+  --draw: #9fc3ff;
+  --note: #6fd3ff;
+  --radius: 8px;
+  --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic UI', sans-serif;
+  color-scheme: dark;
+  font: 16px/1.6 var(--sans);
+  color: var(--fg);
+  background: var(--bg);
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); margin: 0; }
+* { box-sizing: border-box; }
+/* ローカルで直接開くとアーティファクトのリセット CSS が無く、.overlay の display:grid が hidden を上書きしてしまうため明示する */
+[hidden] { display: none !important; }
+p { margin: 0; }
+button { font: inherit; color: inherit; }
+
+.shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.dq-window {
+  background: var(--win-bg);
+  border: 3px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 2px #000, inset 0 0 0 3px #555, 0 0 0 2px #000;
+  padding: 12px 16px;
+  min-width: 0;
+}
+
+/* ---- ヘッダ：冒険の書名 + ステータス ---- */
+.top { padding-block: 12px 8px; display: flex; flex-direction: column; gap: 8px; }
+.mock-note {
+  font-size: 0.8rem; color: var(--note); border: 1px dashed var(--note);
+  border-radius: 6px; padding: 6px 10px;
+}
+.status {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px;
+  font-family: var(--mono); font-size: 0.9rem; padding: 6px 12px;
+}
+.book-btn {
+  background: #000; border: 2px solid var(--accent); color: var(--accent);
+  border-radius: 6px; padding: 2px 10px; cursor: pointer; font-family: var(--sans); font-weight: 700;
+}
+.book-btn:hover, .book-btn:focus-visible { background: #1b1b3a; outline: none; }
+.status .gold { font-variant-numeric: tabular-nums; }
+.status .spacer { flex: 1; }
+
+/* ---- タイムライン ---- */
+.timeline {
+  overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 10px;
+  padding-block: 4px 12px;
+  scroll-behavior: smooth;
+}
+.day { text-align: center; color: var(--muted); font-size: 0.75rem; letter-spacing: 0.1em; }
+.sys { text-align: center; color: var(--muted); font-size: 0.85rem; }
+
+/* 過去の試合：1 行に畳んだメッセージ。クリックで展開 */
+.past { padding: 0; }
+.past > summary {
+  list-style: none; cursor: pointer; padding: 8px 14px;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px;
+  font-variant-numeric: tabular-nums;
+}
+.past > summary::-webkit-details-marker { display: none; }
+.past > summary:hover, .past > summary:focus-visible { background: #10102a; outline: none; border-radius: 5px; }
+.past > summary::before { content: '▶'; font-size: 0.7em; color: var(--muted); }
+.past[open] > summary::before { content: '▼'; }
+.r-no { color: var(--muted); font-family: var(--mono); min-width: 3.2em; }
+.r-names { flex: 1 1 14em; min-width: 0; }
+.r-names b { color: var(--accent); font-weight: 700; }
+.r-res { font-weight: 700; min-width: 4.5em; }
+.r-delta { font-family: var(--mono); min-width: 5.5em; text-align: right; }
+.hit { color: var(--win); } .miss { color: var(--lose); } .draw { color: var(--draw); }
+.tag {
+  font-size: 0.7rem; border: 1px solid var(--muted); color: var(--muted);
+  border-radius: 4px; padding: 0 5px; line-height: 1.5;
+}
+.past-body { padding: 4px 14px 12px 34px; display: flex; flex-direction: column; gap: 8px; }
+.lineup { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.92rem; }
+.lineup td { padding: 2px 6px 2px 0; }
+.lineup td.num { text-align: right; font-family: var(--mono); }
+.mark-bet { color: var(--accent); }
+.mark-win { color: var(--win); }
+.mini-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.mini {
+  background: #000; border: 2px solid var(--border); border-radius: 6px;
+  padding: 0 10px; min-height: 30px; cursor: pointer; font-size: 0.85rem;
+}
+.mini:hover, .mini:focus-visible { background: #1b1b3a; outline: none; }
+.log {
+  font-family: var(--mono); font-size: 0.85rem; line-height: 1.7;
+  border-top: 1px solid #333; padding-top: 6px; margin: 0; white-space: pre-wrap;
+}
+
+/* オート一括：まとまり 1 つのメッセージ */
+.batch > summary .r-names { color: var(--muted); }
+.batch-list { font-family: var(--mono); font-size: 0.82rem; color: var(--muted); display: grid; gap: 1px; }
+
+/* 現在の試合：展開済みの大きいメッセージウィンドウ */
+.current .title { color: var(--accent); font-weight: 700; margin-bottom: 6px; }
+.msg { margin-block: 4px; }
+.msg.jev { color: var(--note); }
+.choices { display: grid; gap: 2px; margin-block: 8px; font-variant-numeric: tabular-nums; }
+.choice {
+  display: grid; grid-template-columns: 1.2em 1fr auto auto; gap: 12px; align-items: baseline;
+  background: none; border: 0; text-align: left; padding: 4px 6px; border-radius: 4px; cursor: pointer;
+}
+.choice .cur { visibility: hidden; animation: blink 1s steps(1) infinite; }
+.choice:hover .cur, .choice:focus-visible .cur, .choice.sel .cur { visibility: visible; }
+.choice:hover, .choice:focus-visible { background: #10102a; outline: none; }
+.choice:disabled { cursor: default; }
+.choice .odds { font-family: var(--mono); }
+.choice .prob { font-family: var(--mono); color: var(--note); min-width: 3.5em; text-align: right; }
+.fight-log { font-family: var(--mono); font-size: 0.9rem; line-height: 1.8; margin-top: 6px; }
+.fight-log .res { font-weight: 700; font-size: 1rem; }
+.next-arrow { text-align: center; animation: blink 1s steps(1) infinite; }
+
+/* ---- 下部コマンドウィンドウ（チャットの入力欄にあたる） ---- */
+.cmd {
+  padding-block: 8px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.cmd .dq-window { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 8px 12px; }
+.cmd-btn {
+  background: none; border: 0; padding: 6px 10px 6px 24px; position: relative;
+  cursor: pointer; border-radius: 4px; min-height: 40px;
+}
+.cmd-btn::before {
+  content: '▶'; position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+  font-size: 0.75em; visibility: hidden; animation: blink 1s steps(1) infinite;
+}
+.cmd-btn:hover:not(:disabled)::before, .cmd-btn:focus-visible::before { visibility: visible; }
+.cmd-btn:focus-visible { outline: none; background: #10102a; }
+.cmd-btn:disabled { opacity: 0.35; cursor: default; }
+.cmd-btn.primary { color: var(--accent); font-weight: 700; }
+
+/* ---- 冒険の書モーダル ---- */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: grid; place-items: center; padding: 16px; z-index: 10;
+}
+.books { width: min(480px, 100%); display: flex; flex-direction: column; gap: 10px; }
+.books h2 { font-size: 1rem; margin: 0 0 6px; }
+.book {
+  width: 100%; display: grid; grid-template-columns: 1.2em 1fr auto; gap: 2px 10px;
+  background: none; border: 0; text-align: left; padding: 6px; border-radius: 4px; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.book:hover, .book:focus-visible, .book.sel { background: #10102a; outline: none; }
+.book .cur { visibility: hidden; animation: blink 1s steps(1) infinite; }
+.book:hover .cur, .book:focus-visible .cur, .book.sel .cur { visibility: visible; }
+.book .sub { grid-column: 2 / 4; color: var(--muted); font-size: 0.8rem; }
+.book .g { font-family: var(--mono); }
+.book-cmds { display: grid; gap: 2px; }
+
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; scroll-behavior: auto !important; }
+}
+@media (max-width: 480px) {
+  .past-body { padding-left: 14px; }
+  .r-delta { min-width: 0; }
+}
+</style>
+
+<div class="shell">
+  <header class="top">
+    <p class="mock-note">UI モック：モンスターを選ぶか「Jevにきく」を押すと試合が進み、結果が 1 行に畳まれて上に積み上がります。過去の行はクリックで開きます。</p>
+    <div class="dq-window status">
+      <button type="button" class="book-btn" id="bookBtn" aria-haspopup="dialog">冒険の書 1：Jev検証 v2 ▼</button>
+      <span>Lv.20</span>
+      <span class="gold" id="goldLabel"></span>
+      <span>Stake 200 G</span>
+      <span class="spacer"></span>
+      <span class="tag">Analyst / Jev</span>
+    </div>
+  </header>
+
+  <main class="timeline" id="timeline" aria-live="polite"></main>
+
+  <footer class="cmd">
+    <nav class="dq-window" id="cmdBar" aria-label="コマンド"></nav>
+  </footer>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="dq-window books" role="dialog" aria-modal="true" aria-labelledby="booksTitle">
+    <h2 id="booksTitle">ぼうけんのしょを えらんでください</h2>
+    <div id="bookList"></div>
+    <div class="book-cmds">
+      <button type="button" class="book" data-close><span class="cur">▶</span><span>ぼうけんのしょを つくる</span></button>
+      <button type="button" class="book" data-close><span class="cur">▶</span><span>ぼうけんのしょを うつす</span></button>
+      <button type="button" class="book" data-close><span class="cur">▶</span><span>ぼうけんのしょを けす</span></button>
+      <button type="button" class="book" data-close><span class="cur">▶</span><span>やめる</span></button>
+    </div>
+    <p class="sys">モックのため、切り替えは見た目だけです（Esc・枠外クリックでも閉じます）</p>
+  </div>
+</div>
+
+<script>
+// 実装時の HistoryEntry に相当する最小データ。見た目の確認用なので乱数で結果を作る
+const POOL = [
+  ['スライム', 1], ['ドラキー', 1.2], ['おおがらす', 1.4], ['キャタピラー', 2], ['さそりばち', 1.6],
+  ['ばくだんいわ', 3.2], ['ひとくいばこ', 3], ['あばれザル', 2.6], ['ホイミスライム', 1.3], ['ぐんたいガニ', 2.4],
+  ['じごくのハサミ', 3.1], ['マドハンド', 2.1], ['ミイラおとこ', 2.7], ['くさったしたい', 2.2],
+]
+const ACTS = ['こうげき', 'ギラ', 'メラ', 'かえんのいき', 'ホイミ', 'ラリホー', 'ルカニ', 'つうこんのいちげき']
+const STAKE = 200
+const nf = new Intl.NumberFormat('ja-JP')
+const signed = (n) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${nf.format(Math.abs(n))}G`
+const pick = (a) => a[Math.floor(Math.random() * a.length)]
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+
+let gold = 12340
+let round = 103
+
+function makeLineup() {
+  const n = 3 + Math.floor(Math.random() * 3)
+  const names = [...POOL].sort(() => Math.random() - 0.5).slice(0, n)
+  const power = names.map(([, p]) => p * (0.7 + Math.random() * 0.6))
+  const sum = power.reduce((a, b) => a + b, 0)
+  return names.map(([name], i) => {
+    const p = power[i] / sum
+    return { name, p, odds: Math.max(1.1, Math.round((0.85 / p) * 10) / 10) }
+  })
+}
+function fightLog(lineup, winner) {
+  const lines = []
+  for (let t = 0; t < 3; t++) {
+    const a = pick(lineup), b = pick(lineup.filter((x) => x !== a))
+    const act = pick(ACTS)
+    lines.push(act === 'ホイミ' ? `${a.name}は ホイミを となえた！` : `${a.name}の ${act}！ ${b.name}に ${3 + Math.floor(Math.random() * 20)}の ダメージ！`)
+  }
+  lines.push(...lineup.filter((m) => m !== lineup[winner]).map((m) => `${m.name}を たおした！`))
+  return lines
+}
+function resolve(lineup) {
+  const r = Math.random()
+  if (r < 0.05) return -1 // 引き分け
+  let acc = 0
+  for (let i = 0; i < lineup.length; i++) { acc += lineup[i].p; if (r * 0.95 < acc) return i }
+  return lineup.length - 1
+}
+function settle(lineup, bet, winner) {
+  if (winner === -1) return 0
+  return winner === bet ? Math.round(STAKE * lineup[bet].odds) - STAKE : -STAKE
+}
+
+// 初期表示用の過去データ
+const items = [
+  { kind: 'day', text: '9月23日' },
+  { kind: 'sys', text: 'ぼうけんのしょ 1 を つくりました（Lv20 / 5,000G / Analyst・Jev）' },
+  { kind: 'batch', from: 1, to: 100, w: 41, l: 55, d: 4, delta: 6140 },
+  { kind: 'day', text: '9月24日' },
+]
+for (let r = 101; r < 103; r++) {
+  const lineup = makeLineup()
+  const jev = r === 101
+  const bet = jev ? lineup.indexOf([...lineup].sort((a, b) => b.p - a.p)[0]) : 0
+  const winner = resolve(lineup)
+  const delta = settle(lineup, bet, winner)
+  items.push({ kind: 'round', round: r, lineup, bet, winner, delta, jev, log: fightLog(lineup, Math.max(0, winner)) })
+}
+let current = { lineup: makeLineup(), jev: null, phase: 'choose', sel: 0, lines: [] }
+
+const $tl = document.getElementById('timeline')
+const $cmd = document.getElementById('cmdBar')
+
+function resultSpan(it) {
+  if (it.winner === -1) return '<span class="r-res draw">引き分け</span>'
+  return it.winner === it.bet ? '<span class="r-res hit">○ 当たり</span>' : '<span class="r-res miss">× ハズレ</span>'
+}
+function roundHtml(it) {
+  const names = it.lineup.map((m, i) => (i === it.bet ? `<b>${m.name}</b>` : m.name)).join('　')
+  const rows = it.lineup.map((m, i) => `
+    <tr>
+      <td>${i === it.bet ? '<span class="mark-bet">◆賭け</span>' : ''}</td>
+      <td>${m.name}${i === it.winner ? ' <span class="mark-win">★勝者</span>' : ''}</td>
+      <td class="num">× ${m.odds.toFixed(1)}</td>
+      <td class="num">${it.jev ? `Jev ${(m.p * 100).toFixed(0)}%` : ''}</td>
+    </tr>`).join('')
+  return `
+  <details class="dq-window past">
+    <summary>
+      <span class="r-no">#${it.round}</span>
+      <span class="r-names">${names}</span>
+      ${it.jev ? '<span class="tag">Jev</span>' : ''}
+      ${resultSpan(it)}
+      <span class="r-delta ${it.delta >= 0 ? 'hit' : 'miss'}">${signed(it.delta)}</span>
+    </summary>
+    <div class="past-body">
+      <div style="overflow-x:auto"><table class="lineup"><tbody>${rows}</tbody></table></div>
+      <div class="mini-actions">
+        <button type="button" class="mini" data-log>バトルログ</button>
+        <button type="button" class="mini">リプレイ</button>
+        ${it.jev ? '<button type="button" class="mini">Jev とのやりとり</button>' : ''}
+      </div>
+      <pre class="log" hidden>${it.log.join('\n')}</pre>
+    </div>
+  </details>`
+}
+function batchHtml(it) {
+  const sample = []
+  for (let r = it.to; r > it.to - 5; r--) {
+    const ok = Math.random() < 0.41
+    sample.push(`#${r}  ${ok ? '○' : '×'}  ${pick(POOL)[0]}  ${ok ? '+' + (100 + Math.floor(Math.random() * 500)) : '−200'}G`)
+  }
+  return `
+  <details class="dq-window past batch">
+    <summary>
+      <span class="r-no">#${it.from}–${it.to}</span>
+      <span class="r-names">オートプレイ ${it.to - it.from + 1} 試合</span>
+      <span class="tag">Auto</span>
+      <span class="r-res">${it.w}勝${it.l}敗${it.d}分</span>
+      <span class="r-delta ${it.delta >= 0 ? 'hit' : 'miss'}">${signed(it.delta)}</span>
+    </summary>
+    <div class="past-body">
+      <div class="batch-list">${sample.map((s) => `<span>${s}</span>`).join('')}<span>…（あと ${it.to - it.from - 4} 試合）</span></div>
+      <div class="mini-actions"><button type="button" class="mini">この区間の統計</button></div>
+    </div>
+  </details>`
+}
+function currentHtml() {
+  const c = current
+  const showProb = c.jev && c.jev !== 'loading'
+  const choices = c.lineup.map((m, i) => `
+    <button type="button" class="choice${c.sel === i && c.phase === 'choose' ? ' sel' : ''}" data-bet="${i}" ${c.phase !== 'choose' ? 'disabled' : ''}>
+      <span class="cur">▶</span>
+      <span>${m.name}${c.phase !== 'choose' && i === c.bet ? ' <span class="mark-bet">◆</span>' : ''}</span>
+      <span class="prob">${showProb ? (m.p * 100).toFixed(0) + '%' : ''}</span>
+      <span class="odds">× ${m.odds.toFixed(1)}</span>
+    </button>`).join('')
+  let jevMsg = ''
+  if (c.jev === 'loading') jevMsg = '<p class="msg jev">Jev は かんがえている…</p>'
+  else if (c.jev) jevMsg = `<p class="msg jev">Jev「${c.lineup[c.jev.slot].name}が 勝つと おもう。」（信頼度 ${(c.jev.conf * 100).toFixed(0)}%）</p>`
+  return `
+  <section class="dq-window current" id="current">
+    <p class="title">第 ${round} 試合</p>
+    <p class="msg">${c.lineup.length}ひきの モンスターが 入場した！</p>
+    ${jevMsg}
+    <div class="choices" role="listbox" aria-label="賭ける相手">${choices}</div>
+    ${c.phase === 'choose' ? '<p class="msg">どのモンスターに かけますか？</p>' : ''}
+    <div class="fight-log">${c.lines.join('<br>')}</div>
+    ${c.phase === 'done' ? '<p class="next-arrow" aria-hidden="true">▼</p>' : ''}
+  </section>`
+}
+function render() {
+  document.getElementById('goldLabel').textContent = `Gold ${nf.format(gold)} G`
+  // 描き直しで開いていた過去の試合が閉じないよう、開閉状態を引き継ぐ
+  const opened = [...$tl.querySelectorAll('details')].map((d) => d.open)
+  $tl.innerHTML = items.map((it) =>
+    it.kind === 'day' ? `<p class="day">── ${it.text} ──</p>`
+    : it.kind === 'sys' ? `<p class="sys">${it.text}</p>`
+    : it.kind === 'batch' ? batchHtml(it) : roundHtml(it)).join('') + currentHtml()
+  $tl.querySelectorAll('details').forEach((d, i) => { if (opened[i]) d.open = true })
+  renderCmd()
+}
+function renderCmd() {
+  const c = current
+  const btn = (id, label, opts = {}) =>
+    `<button type="button" class="cmd-btn${opts.primary ? ' primary' : ''}" data-cmd="${id}" ${opts.disabled ? 'disabled' : ''}>${label}</button>`
+  if (c.phase === 'done') {
+    $cmd.innerHTML = btn('next', 'つぎの しあいへ', { primary: true }) + btn('log', 'バトルログ') + btn('replay', 'リプレイ')
+  } else if (c.phase === 'fighting') {
+    $cmd.innerHTML = btn('x', 'たたかいを みまもっている…', { disabled: true })
+  } else {
+    const ready = c.jev && c.jev !== 'loading'
+    $cmd.innerHTML =
+      (ready ? btn('jevbet', 'Jevの よそうで かける', { primary: true }) : btn('ask', 'Jevに きく', { primary: true, disabled: c.jev === 'loading' })) +
+      btn('bet', 'えらんで かける', { disabled: c.jev === 'loading' }) +
+      btn('look', 'しらべる') +
+      btn('auto', 'オート…')
+  }
+}
+function scrollBottom() {
+  requestAnimationFrame(() => { $tl.scrollTop = $tl.scrollHeight })
+}
+
+function startFight(bet, byJev) {
+  const c = current
+  c.bet = bet
+  c.byJev = byJev
+  c.phase = 'fighting'
+  c.winner = resolve(c.lineup)
+  const lines = fightLog(c.lineup, Math.max(0, c.winner))
+  c.fullLog = lines
+  c.lines = [`${c.lineup[bet].name}に ${STAKE}G かけた。`]
+  render(); scrollBottom()
+  // 1 行ずつ出してメッセージウィンドウの送りを再現する（減速設定なら一括表示）
+  const step = () => {
+    if (lines.length === 0) return finish()
+    c.lines.push(lines.shift())
+    render(); scrollBottom()
+    setTimeout(step, reduced ? 0 : 380)
+  }
+  setTimeout(step, reduced ? 0 : 380)
+}
+function finish() {
+  const c = current
+  c.delta = settle(c.lineup, c.bet, c.winner)
+  gold += c.delta
+  const res = c.winner === -1 ? '<span class="res draw">引き分け！ 賭け金は もどってきた。</span>'
+    : c.winner === c.bet ? `<span class="res hit">${c.lineup[c.winner].name}の かち！ ${signed(c.delta)}</span>`
+    : `<span class="res miss">${c.lineup[c.winner].name}の かち… ${signed(c.delta)}</span>`
+  c.lines.push(res)
+  c.phase = 'done'
+  render(); scrollBottom()
+}
+function nextRound() {
+  const c = current
+  items.push({ kind: 'round', round, lineup: c.lineup, bet: c.bet, winner: c.winner, delta: c.delta, jev: !!c.jev, log: c.fullLog })
+  round += 1
+  current = { lineup: makeLineup(), jev: null, phase: 'choose', sel: 0, lines: [] }
+  render(); scrollBottom()
+}
+function askJev() {
+  current.jev = 'loading'
+  render(); scrollBottom()
+  setTimeout(() => {
+    const best = current.lineup.reduce((bi, m, i, a) => (m.p > a[bi].p ? i : bi), 0)
+    current.jev = { slot: best, conf: 0.5 + Math.random() * 0.4 }
+    current.sel = best
+    render(); scrollBottom()
+  }, reduced ? 200 : 1100)
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button, [data-close]')
+  if (!t) return
+  if (t.dataset.bet !== undefined && current.phase === 'choose') return startFight(Number(t.dataset.bet), false)
+  if (t.dataset.log !== undefined) {
+    const pre = t.closest('.past-body').querySelector('.log')
+    pre.hidden = !pre.hidden
+    return
+  }
+  const cmd = t.dataset.cmd
+  if (cmd === 'ask') return askJev()
+  if (cmd === 'jevbet') return startFight(current.jev.slot, true)
+  if (cmd === 'bet') return document.querySelector('.choice:not(:disabled)')?.focus()
+  if (cmd === 'next') return nextRound()
+  if (t.id === 'bookBtn') return openBooks()
+  if (t.dataset.close !== undefined) return closeBooks()
+})
+document.addEventListener('keydown', (e) => {
+  if (!document.getElementById('overlay').hidden && e.key === 'Escape') closeBooks()
+  // 結果表示中は Enter / Space で次の試合へ（現行アプリの「Enter 一発で次へ」を踏襲）
+  if (current.phase === 'done' && (e.key === 'Enter' || e.key === ' ') && document.getElementById('overlay').hidden
+      && !e.target.closest('summary, .mini')) { e.preventDefault(); nextRound() }
+})
+
+const BOOKS = [
+  ['1：Jev検証 v2', null, 'Analyst / Jev ・第103試合 ・9/24'],
+  ['2：ためし打ち', 820, 'Classic / Human ・第12試合 ・9/23'],
+  ['3：Jev検証 v1（比較用）', 0, 'Analyst / Jev ・第500試合で破産 ・9/22'],
+]
+function openBooks() {
+  document.getElementById('bookList').innerHTML = BOOKS.map(([n, g, s], i) => `
+    <button type="button" class="book${i === 0 ? ' sel' : ''}" data-close>
+      <span class="cur">▶</span><span>${n}</span><span class="g">${nf.format(g ?? gold)} G</span>
+      <span class="sub">${s}</span>
+    </button>`).join('')
+  document.getElementById('overlay').hidden = false
+  document.querySelector('#bookList .book')?.focus()
+}
+function closeBooks() {
+  document.getElementById('overlay').hidden = true
+  document.getElementById('bookBtn').focus()
+}
+document.getElementById('overlay').addEventListener('click', (e) => { if (e.target.id === 'overlay') closeBooks() })
+
+render(); scrollBottom()
+</script>
