@@ -133,7 +133,7 @@ describe('export', () => {
     const { session, history } = store.getState()
     // 設定オブジェクトに余計なフィールドが紛れ込んでも出力されないこと
     const settings = { ...store.getState().settings, apiKey: 'vck_secret_key_value' } as never
-    const json = JSON.stringify(buildExport({ session, history, settings }))
+    const json = JSON.stringify(buildExport({ books: [{ session: session!, history }], settings }))
     expect(json).not.toContain('vck_secret')
     expect(json).not.toContain('apiKey')
   })

@@ -495,6 +495,18 @@ ul.plain {
 .table-scroll {
   overflow-x: auto;
 }
+.compare-table td.num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+/* 遊んでいる冊の行を示す。他の冊と見比べる時の基準になるため */
+.compare-table tr.is-current th {
+  color: var(--accent);
+}
+.compare-table tr.is-current th::before {
+  content: '▶ ';
+}
 
 .stats-grid {
   display: grid;

@@ -4,6 +4,7 @@ import { MemoryStorage } from '../../src/storage/localStorage'
 import { LEGACY_BOOK_NAME, createStores, migrateLegacyStorage, trimHistory, type HistoryEntry } from '../../src/storage/session'
 import { createSession, playBet } from '../../src/ui/logic/arenaFlow'
 import { ArenaStore, BookLockedError } from '../../src/ui/logic/arenaStore'
+import { compareBook, matchesPlayed, sortBooks } from '../../src/ui/logic/books'
 
 const game = createMockArenaGame()
 const params = { heroLevel: 30, initialGold: 10000, informationMode: 'classic', playerMode: 'human' } as const
@@ -205,5 +206,30 @@ describe('trimHistory との整合', () => {
     expect(t.battle).toBeUndefined()
     expect(t.won).toBe(e.won)
     expect(t.battleSeed).toBe(e.battleSeed)
+  })
+})
+
+describe('冒険の書どうしの比較', () => {
+  it('単冊の統計と同じ集計を行い、予測なしなら Brier は null', () => {
+    const store = new ArenaStore(game, createStores(new MemoryStorage()))
+    const s = store.createBook(params)
+    store.bet(0)
+    store.next()
+    store.bet(1)
+    const { session, history } = store.getState()
+    const row = compareBook(session!, history)
+    expect(row.session.id).toBe(s.id)
+    expect(row.stats.matches).toBe(2)
+    expect(row.stats.profit).toBe(session!.gold - session!.initialGold)
+    expect(row.predicted).toBe(0)
+    expect(row.brier).toBeNull()
+  })
+
+  it('一覧は最後に遊んだ冊を上に並べる', () => {
+    const a = { ...createSession({ ...params, seed: 1 }), updatedAt: '2026-01-01T00:00:00.000Z' }
+    const b = { ...createSession({ ...params, seed: 2 }), updatedAt: '2026-02-01T00:00:00.000Z' }
+    expect(sortBooks([a, b]).map((x) => x.id)).toEqual([b.id, a.id])
+    expect(matchesPlayed({ ...a, round: 3, phase: 'match' })).toBe(2)
+    expect(matchesPlayed({ ...a, round: 3, phase: 'result' })).toBe(3)
   })
 })

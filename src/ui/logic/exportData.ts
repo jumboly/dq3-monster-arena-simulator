@@ -8,23 +8,23 @@
 import type { HistoryEntry, Session, Settings } from '../../storage/session'
 
 export const EXPORT_FORMAT = 'dq3-arena-export'
-export const EXPORT_VERSION = 1
+/** 2: 冒険の書（複数冊）対応。1 は単一の session / history だった */
+export const EXPORT_VERSION = 2
+
+export interface ExportBook {
+  session: Session
+  history: HistoryEntry[]
+}
 
 export interface ExportPayload {
   format: typeof EXPORT_FORMAT
   version: number
   exportedAt: string
   settings: Settings
-  session: Session | null
-  history: HistoryEntry[]
+  books: ExportBook[]
 }
 
-export function buildExport(p: {
-  session: Session | null
-  history: HistoryEntry[]
-  settings: Settings
-  now?: Date
-}): ExportPayload {
+export function buildExport(p: { books: ExportBook[]; settings: Settings; now?: Date }): ExportPayload {
   return {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
@@ -35,7 +35,6 @@ export function buildExport(p: {
       useMockAgent: p.settings.useMockAgent,
       drawPolicy: p.settings.drawPolicy,
     },
-    session: p.session,
-    history: p.history,
+    books: p.books.map((b) => ({ session: b.session, history: b.history })),
   }
 }
