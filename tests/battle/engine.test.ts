@@ -162,7 +162,6 @@ describe('初期化（§2）', () => {
     for (const s of r.finalStates) {
       expect(s.monsterId).toBe(0x19)
       expect(getMonster(s.transformMonsterId).level).toBeLessThanOrEqual(1)
-      expect(s.name.startsWith('あやしいかげ')).toBe(true)
     }
     const start = r.log[0]
     expect(start.kind).toBe('battle-start')
@@ -172,6 +171,33 @@ describe('初期化（§2）', () => {
     }
     expect(String(start.internal?.idx0)).toContain('entity')
     expect(r.fidelityHits['U-10']).toBe(3)
+  })
+
+  it('撃破されたあやしいかげだけ、撃破メッセージの後から正体の名前になる（$02BAE8）', () => {
+    const ids = getMatchCard(37).entries.map((e) => e.monsterId)
+    let checked = 0
+    for (let seed = 0; seed < 50; seed++) {
+      const r = run(engine, ids, 0, seed, { leaderLevel: 40 })
+      for (const s of r.finalStates) {
+        const entity = getMonster(s.transformMonsterId).name
+        if (!s.dead || s.transformMonsterId === 0x19) {
+          expect(s.name.startsWith('あやしいかげ')).toBe(true)
+          continue
+        }
+        checked++
+        expect(s.name.startsWith(entity)).toBe(true)
+        const defeatAt = r.log.findIndex((e) => e.kind === 'defeat' && e.targetSlots?.includes(s.slot))
+        expect(r.log[defeatAt].simple).toContain('あやしいかげ')
+        const note = r.log[defeatAt + 1]
+        expect(note.kind).toBe('note')
+        expect(note.internal?.reveal).toBe(true)
+        // 撃破より前のログには正体の名前を出さない（Hidden のまま）
+        expect(r.log.slice(1, defeatAt).some((e) => e.simple.includes(s.name))).toBe(false)
+      }
+      // 決着時の勝者表示は撃破されていないので「あやしいかげ」のまま
+      if (r.outcome.kind === 'winner') expect(r.log.at(-1)!.simple.startsWith('あやしいかげ')).toBe(true)
+    }
+    expect(checked).toBeGreaterThan(0)
   })
 })
 

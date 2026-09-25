@@ -12,8 +12,6 @@ export interface CardSummary {
   /** 0 始まり（UI の「試合 N」は index + 1） */
   index: number
   names: string[]
-  /** この試合が現在のエンジンで遊べるか（試合 38 は Phase B） */
-  playable: boolean
 }
 
 export interface ArenaGame {

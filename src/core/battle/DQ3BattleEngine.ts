@@ -224,6 +224,31 @@ class BattleRun {
     const trace = this.rng.drainTrace()
     if (trace.length > 0) entry.internal = { ...(entry.internal ?? {}), rng: formatRomTrace(trace) }
     this.log.push(entry)
+    // 撃破の経路（通常ダメージ・ザキ・メガンテ等）が複数あるので、正体の差し替えはここで一括して行う
+    if (entry.kind === 'defeat') for (const slot of entry.targetSlots ?? []) this.revealEntity(slot)
+  }
+
+  /**
+   * $02BAE8 撃破時にあやしいかげの表示名を正体に差し替える（battle-spec §2.4）。
+   * 撃破メッセージ自体は差し替え前の名前で出し、以降のログから正体の名前になる。
+   * 生き残った選手は撃破されないので、決着時も「あやしいかげ」のまま（差し替えは撃破時しか資料に無い）。
+   */
+  private revealEntity(slot: number): void {
+    const f = this.all.find((x) => x.s.slot === slot)
+    if (!f || f.s.monsterId === f.s.transformMonsterId) return
+    // 同名表記の添字は残す。正体が別々でも、ログ上でどのスロットの選手かを追えるようにするため
+    const suffix = f.s.name.slice(this.data.monster(f.s.monsterId).name.length)
+    const revealed = f.def.name + suffix
+    if (revealed === f.s.name) return
+    this.log.push({
+      turn: this.turn,
+      kind: 'note',
+      targetSlots: [slot],
+      // 実機の文言ではなく、表示名が変わったことを示す注記（実機は以降の表示が変わるだけ）
+      simple: `（${f.s.name}の しょうたい: ${f.def.name}）`,
+      internal: { reveal: true, entity: hex2(f.s.transformMonsterId) },
+    })
+    f.s.name = revealed
   }
 
   private get all(): Fighter[] {

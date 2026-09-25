@@ -19,7 +19,7 @@ export function AnalysisPage() {
   const { session } = useArenaState()
   const [source, setSource] = useState<'current' | 'card'>(session ? 'current' : 'card')
   const cards = useMemo(() => game.listCards(), [game])
-  const [cardIndex, setCardIndex] = useState(() => cards.find((c) => c.playable)?.index ?? 0)
+  const [cardIndex, setCardIndex] = useState(0)
   const [heroLevel, setHeroLevel] = useState(session?.heroLevel ?? DEFAULT_HERO_LEVEL)
   const [offerSeed, setOfferSeed] = useState(() => randomSeed())
   const [trials, setTrials] = useState(1000)
@@ -88,10 +88,8 @@ export function AnalysisPage() {
                 aria-label="試合カード"
               >
                 {cards.map((c) => (
-                  // 未対応カード（試合 38 = Phase B）は選べないが、存在は一覧で見せる
-                  <option key={c.index} value={c.index} disabled={!c.playable}>
+                  <option key={c.index} value={c.index}>
                     試合 {c.index + 1}: {c.names.join(' / ')}
-                    {c.playable ? '' : '（Phase B・未対応）'}
                   </option>
                 ))}
               </select>

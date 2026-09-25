@@ -23,8 +23,6 @@ export interface MatchOffer {
   /** 0 始まりの試合 ID（$C30DC5 の添字） */
   cardIndex: number
   heroLevel: number
-  /** 試合 38 を候補から除いて抽選したか（Phase B 未実装のための近似） */
-  excludedShadowMatch?: boolean
   /** 暫定のオッズ境界処理（U-18）を通った選手数 */
   provisionalOddsCount?: number
   stake: number
