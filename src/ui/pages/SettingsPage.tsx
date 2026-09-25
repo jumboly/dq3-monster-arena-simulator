@@ -45,30 +45,6 @@ export function SettingsPage() {
         </label>
       </Window>
 
-      <Window title="引き分け時の払い戻し">
-        <p className="muted small">
-          攻略サイトの記述では、賭けた選手が生き残った引き分け（10 ターン経過）だけ賭け金が戻ります。次の試合から反映されます。
-        </p>
-        <fieldset className="field">
-          <label className="radio">
-            <input
-              type="radio"
-              checked={settings.drawPolicy === 'refund'}
-              onChange={() => store.updateSettings({ drawPolicy: 'refund' })}
-            />
-            返金 <span className="muted small">賭けた選手が生き残ったときだけ戻る（既定）</span>
-          </label>
-          <label className="radio">
-            <input
-              type="radio"
-              checked={settings.drawPolicy === 'forfeit'}
-              onChange={() => store.updateSettings({ drawPolicy: 'forfeit' })}
-            />
-            没収 <span className="muted small">引き分けでは常に戻らない</span>
-          </label>
-        </fieldset>
-      </Window>
-
       {session && (
         <Window title={`いまの冒険の書（${session.name}）`}>
           <fieldset className="field">

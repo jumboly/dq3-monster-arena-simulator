@@ -38,8 +38,6 @@ export interface ArenaRoundResult {
   draw: boolean
   /** ROM の終了タイプ 5 当たり / 6 ハズレ / 7 引き分け */
   endType: ArenaEndType
-  /** 引き分けの払い戻しをどの前提で計算したか（実機の扱いは未解明: U-20） */
-  drawPolicy: 'refund' | 'forfeit'
   /** 払い戻し額（賭け金を含む総額。負けなら 0） */
   payout: number
   /** 所持金の増減（payout - stake） */

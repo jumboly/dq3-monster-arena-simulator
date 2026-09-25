@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BetDecision, BettingAgent, MatchObservation } from '../../src/ai/BettingAgent'
 import { createDQ3ArenaGame } from '../../src/core/arena/DQ3ArenaGame'
-import type { DrawPolicy } from '../../src/core/arena/payout'
 import { DQ3BattleEngine } from '../../src/core/battle/DQ3BattleEngine'
 import { MemoryStorage } from '../../src/storage/localStorage'
 import { createStores } from '../../src/storage/session'
@@ -233,7 +232,7 @@ describe('runAnalysis', () => {
   })
 })
 
-describe('contract v2 (listCards / createOfferForCard / drawPolicy)', () => {
+describe('contract v2 (listCards / createOfferForCard / endType)', () => {
   it('createOfferForCard は試合 38 を含む全カードで指定カードを返す', () => {
     for (const c of game.listCards()) {
       const o = game.createOfferForCard({ cardIndex: c.index, heroLevel: 30, round: 0, seed: 1 })
@@ -242,27 +241,21 @@ describe('contract v2 (listCards / createOfferForCard / drawPolicy)', () => {
     }
   })
 
-  it('resolveBet は endType と drawPolicy を返し、履歴にも残る', () => {
+  it('resolveBet は endType を返し、履歴にも残る', () => {
     const { entry, result } = playBet(game, newSession(), 0)
     expect([5, 6, 7]).toContain(result.endType)
     expect(result.endType === 5).toBe(result.won)
     expect(entry.endType).toBe(result.endType)
-    expect(entry.drawPolicy).toBe('refund')
   })
 
-  it('引き分けの払い戻しは解決時点の drawPolicy に従う（設定変更が次の試合から反映される）', () => {
-    let policy: DrawPolicy = 'refund'
-    const g = createDQ3ArenaGame({ engine: new DQ3BattleEngine(), drawPolicy: () => policy })
-    for (const card of g.listCards()) {
-      const offer = g.createOfferForCard({ cardIndex: card.index, heroLevel: 30, round: 0, seed: 0 })
+  it('10 ターン経過の引き分けは resolveBet でも返金になる', () => {
+    for (const card of game.listCards()) {
+      const offer = game.createOfferForCard({ cardIndex: card.index, heroLevel: 30, round: 0, seed: 0 })
       for (let seed = 0; seed < 300; seed++) {
-        policy = 'refund'
-        const a = g.resolveBet({ offer, betSlot: 0, goldBefore: 1000, battleSeed: seed })
-        if (!a.draw) continue
-        policy = 'forfeit'
-        const b = g.resolveBet({ offer, betSlot: 0, goldBefore: 1000, battleSeed: seed })
-        expect(a.delta).toBe(0)
-        expect(b.delta).toBe(-offer.stake)
+        const r = game.resolveBet({ offer, betSlot: 0, goldBefore: 1000, battleSeed: seed })
+        if (r.battle.outcome.kind !== 'draw' || r.battle.outcome.reason !== 'turn-limit') continue
+        expect(r.delta).toBe(0)
+        expect(r.goldAfter).toBe(1000)
         return
       }
     }

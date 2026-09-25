@@ -8,8 +8,11 @@
 import type { HistoryEntry, Session, Settings } from '../../storage/session'
 
 export const EXPORT_FORMAT = 'dq3-arena-export'
-/** 2: 冒険の書（複数冊）対応。1 は単一の session / history だった */
-export const EXPORT_VERSION = 2
+/**
+ * 3: 引き分けの払い戻し設定（settings.drawPolicy）を廃止。廃止前に遊んだ試合の履歴には当時の drawPolicy が残る。
+ * 2: 冒険の書（複数冊）対応。1 は単一の session / history だった
+ */
+export const EXPORT_VERSION = 3
 
 export interface ExportBook {
   session: Session
@@ -33,7 +36,6 @@ export function buildExport(p: { books: ExportBook[]; settings: Settings; now?: 
       jevPolicy: p.settings.jevPolicy,
       autoPlayFailureLimit: p.settings.autoPlayFailureLimit,
       useMockAgent: p.settings.useMockAgent,
-      drawPolicy: p.settings.drawPolicy,
     },
     books: p.books.map((b) => ({ session: b.session, history: b.history })),
   }

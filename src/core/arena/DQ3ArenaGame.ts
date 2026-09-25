@@ -13,13 +13,11 @@ import type { ArenaGame, CardSummary } from './ArenaGame'
 import { pickCard } from './matchmaking'
 import { buildObservation } from './observation'
 import { oddsToNumber, rollOdds } from './odds'
-import { settle, stakeFor, type DrawPolicy } from './payout'
+import { settle, stakeFor } from './payout'
 import type { ArenaRoundResult, Contestant, MatchOffer } from './types'
 
 export interface ArenaGameOptions {
   engine: BattleEngine
-  /** 引き分けの扱いは設定画面で試合の合間に変わるので、値ではなく読み出し関数で受け取る */
-  drawPolicy?: () => DrawPolicy
 }
 
 function buildContestants(cardIndex: number, rng: RandomSource): { contestants: Contestant[]; provisional: number } {
@@ -33,7 +31,6 @@ function buildContestants(cardIndex: number, rng: RandomSource): { contestants: 
 }
 
 export function createDQ3ArenaGame(options: ArenaGameOptions): ArenaGame {
-  const getDrawPolicy = options.drawPolicy ?? (() => 'refund')
 
   const offerFor = (cardIndex: number, heroLevel: number, round: number, rng: RandomSource): MatchOffer => {
     const { contestants, provisional } = buildContestants(cardIndex, rng)
@@ -70,8 +67,7 @@ export function createDQ3ArenaGame(options: ArenaGameOptions): ArenaGame {
         { monsterIds: offer.contestants.map((c) => c.monsterId), heroLevel: offer.heroLevel, betSlot },
         new SeededRandom(battleSeed),
       )
-      const drawPolicy = getDrawPolicy()
-      const s = settle({ stake: offer.stake, odds: offer.contestants[betSlot].odds, outcome: battle.outcome, betSlot, drawPolicy })
+      const s = settle({ stake: offer.stake, odds: offer.contestants[betSlot].odds, outcome: battle.outcome, betSlot })
       return {
         offer,
         betSlot,
@@ -79,7 +75,6 @@ export function createDQ3ArenaGame(options: ArenaGameOptions): ArenaGame {
         won: s.won,
         draw: s.draw,
         endType: battle.outcome.endType,
-        drawPolicy,
         payout: s.payout,
         delta: s.delta,
         goldBefore,
