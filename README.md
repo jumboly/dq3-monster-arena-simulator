@@ -44,6 +44,7 @@ Browser (GitHub Pages, no backend)
 - **AI は `BettingAgent` インターフェースで分離**しています。AI には `MatchObservation`（賭ける前に人間にも見せてよい情報）だけを渡し、乱数シード・実際の初期 HP・あやしいかげの実体などの Hidden Runtime State は渡しません。Classic / Analyst の画面表示と AI への入力は同じ関数（`buildObservation`）から作ります。
 - **乱数は差し替え可能**です。エンジンは ROM の呼び出し口（`rand00FF`, `rand0toA`, `rand63to99` など）と 1 対 1 の `RomRandom` だけを使うので、将来 SFC 実機の乱数生成器（`SfcDq3Rng`）を実装したときに消費順まで合わせられます。
 - **保存容量**: localStorage は概ね 5M 文字です。Battle Log（1 試合 約 15KB）は遊んでいる冒険の書の直近 30 試合だけ保持し、他の冊は要約（約 0.8KB）だけ残します。ログは battleSeed から再生成できます。冒険の書導入前の単一セッションは、初回起動時に「冒険の書 1」へ自動で移行します。
+- **Analysis は Web Worker で実行**します（`src/ui/logic/analysis.worker.ts`）。Worker もメインスレッドと同じ `createDefaultArenaGame()` と `runAnalysis` を使うので、同じ seed なら実行場所によらず同じ表になります。Worker を使えない環境ではメインスレッドで分割実行します。
 - 賭けた選手（Group 4）が戦闘処理の分岐を変えるため、勝率は `P(Winner=i | Match, Bet=j)` として扱います（例: 賭けると回避率の分母が 48 → 64 になる）。
 
 ## How to Run

@@ -5,7 +5,7 @@ import { summarizeRow, type WinDistribution } from '../../core/stats/winDistribu
 import { Window } from '../components/Window'
 import { useArenaDeps, useArenaState } from '../hooks/arenaContext'
 import { DEFAULT_HERO_LEVEL, clampHeroLevel, currentOffer } from '../logic/arenaFlow'
-import { runAnalysis } from '../logic/analysisRunner'
+import { analyze } from '../logic/analysisClient'
 import { formatOdds, formatPercent, slotLetter } from '../logic/format'
 
 const TRIAL_CHOICES = [100, 1000, 5000, 10000]
@@ -44,7 +44,7 @@ export function AnalysisPage() {
     setError(null)
     setResult(null)
     try {
-      const { dist, aborted } = await runAnalysis({
+      const { dist, aborted } = await analyze({
         game,
         offer,
         trialsPerBet: trials,
