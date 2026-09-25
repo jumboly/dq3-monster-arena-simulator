@@ -21,7 +21,6 @@
 import type { BetDecision, InformationMode } from '../ai/BettingAgent'
 import type { MatchOffer } from '../core/arena/types'
 import type { ArenaEndType, BattleOutcome, BattleResult } from '../core/battle/types'
-import type { DrawPolicy } from '../core/arena/payout'
 import { createVersionedStore, type KeyValueStorage, type SaveResult, type VersionedStore } from './localStorage'
 
 export type PlayerMode = 'human' | 'jev'
@@ -83,8 +82,6 @@ export interface HistoryEntry {
   battleSeed: number
   /** ROM の終了タイプ 5 当たり / 6 ハズレ / 7 引き分け */
   endType: ArenaEndType
-  /** 引き分けの払い戻し前提。実機未解明（U-20）で設定により変わるため、当時の前提を残す */
-  drawPolicy: DrawPolicy
   summary: BattleSummary
   /** 直近 LOG_RETENTION 件だけ保持。古いものは undefined（resolveBet で再生成可能） */
   battle?: BattleResult
@@ -100,15 +97,12 @@ export interface Settings {
   autoPlayFailureLimit: number
   /** API キーがあってもモックエージェントを使う（API を消費せずに UI を試すため） */
   useMockAgent: boolean
-  /** 引き分け時の払い戻し。実機の扱いが未解明（U-20）なので利用者が選べるようにする */
-  drawPolicy: DrawPolicy
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   jevPolicy: 'max-ev',
   autoPlayFailureLimit: 3,
   useMockAgent: false,
-  drawPolicy: 'refund',
 }
 
 // --- validators -----------------------------------------------------------

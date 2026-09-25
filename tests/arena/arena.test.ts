@@ -93,25 +93,24 @@ describe('matchmaking', () => {
 describe('payout', () => {
   const odds = { integer: 2, tenths: 8 }
   it('当たりは 賭け金 × オッズ を整数で', () => {
-    const s = settle({ stake: 300, odds, outcome: { kind: 'winner', slot: 1, turn: 3, endType: 5 }, betSlot: 1, drawPolicy: 'refund' })
+    const s = settle({ stake: 300, odds, outcome: { kind: 'winner', slot: 1, turn: 3, endType: 5 }, betSlot: 1 })
     expect(s).toEqual({ won: true, draw: false, payout: 840, delta: 540 })
   })
   it('他の選手が勝てば没収', () => {
-    const s = settle({ stake: 300, odds, outcome: { kind: 'winner', slot: 0, turn: 3, endType: 6 }, betSlot: 1, drawPolicy: 'refund' })
+    const s = settle({ stake: 300, odds, outcome: { kind: 'winner', slot: 0, turn: 3, endType: 6 }, betSlot: 1 })
     expect(s.delta).toBe(-300)
   })
   it('10 ターン経過で単独勝者なし（タイプ 6）は没収', () => {
-    const s = settle({ stake: 300, odds, outcome: { kind: 'no-winner', reason: 'turn-limit', turn: 10, endType: 6, survivors: [0, 2] }, betSlot: 1, drawPolicy: 'refund' })
+    const s = settle({ stake: 300, odds, outcome: { kind: 'no-winner', reason: 'turn-limit', turn: 10, endType: 6, survivors: [0, 2] }, betSlot: 1 })
     expect(s).toEqual({ won: false, draw: false, payout: 0, delta: -300 })
   })
-  it('引き分けは方針に従う', () => {
+  it('10 ターン経過の引き分けは賭けた選手が生き残っているので返金', () => {
     const draw: BattleOutcome = { kind: 'draw', reason: 'turn-limit', turn: 10, endType: 7 }
-    expect(settle({ stake: 300, odds, outcome: draw, betSlot: 1, drawPolicy: 'refund' }).delta).toBe(0)
-    expect(settle({ stake: 300, odds, outcome: draw, betSlot: 1, drawPolicy: 'forfeit' }).delta).toBe(-300)
+    expect(settle({ stake: 300, odds, outcome: draw, betSlot: 1 })).toEqual({ won: false, draw: true, payout: 300, delta: 0 })
   })
-  it('生存 0 体の引き分けは賭けた選手も倒れているので、返金方針でも没収', () => {
+  it('生存 0 体の引き分けは賭けた選手も倒れているので没収', () => {
     const draw: BattleOutcome = { kind: 'draw', reason: 'all-inactive', turn: 4, endType: 7 }
-    const s = settle({ stake: 300, odds, outcome: draw, betSlot: 1, drawPolicy: 'refund' })
+    const s = settle({ stake: 300, odds, outcome: draw, betSlot: 1 })
     expect(s).toEqual({ won: false, draw: true, payout: 0, delta: -300 })
   })
 })

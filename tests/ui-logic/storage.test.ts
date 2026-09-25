@@ -65,7 +65,6 @@ function entry(round: number, withLog = true): HistoryEntry {
     goldAfter: 9700,
     battleSeed: round,
     endType: 6,
-    drawPolicy: 'refund',
     summary: { outcome: { kind: 'winner', slot: 1, turn: 3, endType: 6 }, turns: 3, fidelityHits: {} },
     ...(withLog
       ? {
@@ -123,6 +122,6 @@ describe('history retention', () => {
   it('設定は欠けた項目を既定値で埋める', () => {
     const storage = new MemoryStorage()
     storage.setItem('dq3arena.settings', JSON.stringify({ v: 1, data: { jevPolicy: 'max-win', autoPlayFailureLimit: 5 } }))
-    expect(loadSettings(createStores(storage))).toEqual({ jevPolicy: 'max-win', autoPlayFailureLimit: 5, useMockAgent: false, drawPolicy: 'refund' })
+    expect(loadSettings(createStores(storage))).toEqual({ jevPolicy: 'max-win', autoPlayFailureLimit: 5, useMockAgent: false })
   })
 })
