@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createDQ3ArenaGame } from '../../src/core/arena/DQ3ArenaGame'
-import { cardLimitForLevel, pickCard, SHADOW_MATCH_INDEX } from '../../src/core/arena/matchmaking'
+import { cardLimitForLevel, pickCard } from '../../src/core/arena/matchmaking'
 import { contestantId } from '../../src/core/arena/observation'
 import { oddsSpread, oddsTimesTen, rollOdds } from '../../src/core/arena/odds'
 import { settle, stakeFor } from '../../src/core/arena/payout'
@@ -77,19 +77,16 @@ describe('matchmaking', () => {
     expect([1, 10, 11, 15, 16, 21, 22, 29, 30, 99].map(cardLimitForLevel)).toEqual([10, 10, 19, 19, 24, 24, 33, 33, 38, 38])
   })
 
-  it('Lv30 以上で試合 38 を除外する設定では 0..36 から選ぶ', () => {
+  it('Lv30 以上は試合 38（あやしいかげ）を含む 0..37 から選ぶ', () => {
     const rng = new SeededRandom(7)
     let max = 0
-    for (let i = 0; i < 2000; i++) {
-      const p = pickCard(30, rng, false)
-      expect(p.excludedShadowMatch).toBe(true)
-      max = Math.max(max, p.cardIndex)
-    }
-    expect(max).toBe(SHADOW_MATCH_INDEX - 1)
+    for (let i = 0; i < 2000; i++) max = Math.max(max, pickCard(30, rng))
+    expect(max).toBe(37)
   })
 
-  it('Lv29 以下は試合 38 に届かないので除外扱いにならない', () => {
-    expect(pickCard(29, new SeededRandom(1), false).excludedShadowMatch).toBe(false)
+  it('Lv29 以下は試合 38 に届かない', () => {
+    const rng = new SeededRandom(7)
+    for (let i = 0; i < 2000; i++) expect(pickCard(29, rng)).toBeLessThan(33)
   })
 })
 
@@ -122,10 +119,10 @@ describe('payout', () => {
 describe('DQ3ArenaGame', () => {
   const game = createDQ3ArenaGame({ engine: stubEngine({ kind: 'winner', slot: 0, turn: 2, endType: 5 }) })
 
-  it('38 カードを列挙し、試合 38 は Phase B として遊べない扱い', () => {
+  it('38 カードを列挙する', () => {
     const cards = game.listCards()
     expect(cards).toHaveLength(38)
-    expect(cards.filter((c) => !c.playable).map((c) => c.index)).toEqual([SHADOW_MATCH_INDEX])
+    expect(cards[37].names).toEqual(['あやしいかげ', 'あやしいかげ', 'あやしいかげ'])
   })
 
   it('同じ seed なら同じ試合・同じオッズ', () => {

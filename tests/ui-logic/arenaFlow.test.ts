@@ -234,11 +234,8 @@ describe('runAnalysis', () => {
 })
 
 describe('contract v2 (listCards / createOfferForCard / drawPolicy)', () => {
-  it('listCards に選べないカードが含まれ、createOfferForCard は指定カードを返す', () => {
-    const cards = game.listCards()
-    expect(cards.some((c) => !c.playable)).toBe(true)
-    const playable = cards.filter((c) => c.playable)
-    for (const c of playable) {
+  it('createOfferForCard は試合 38 を含む全カードで指定カードを返す', () => {
+    for (const c of game.listCards()) {
       const o = game.createOfferForCard({ cardIndex: c.index, heroLevel: 30, round: 0, seed: 1 })
       expect(o.cardIndex).toBe(c.index)
       expect(o.contestants.map((x) => x.name)).toEqual(c.names)
@@ -256,7 +253,7 @@ describe('contract v2 (listCards / createOfferForCard / drawPolicy)', () => {
   it('引き分けの払い戻しは解決時点の drawPolicy に従う（設定変更が次の試合から反映される）', () => {
     let policy: DrawPolicy = 'refund'
     const g = createDQ3ArenaGame({ engine: new DQ3BattleEngine(), drawPolicy: () => policy })
-    for (const card of g.listCards().filter((c) => c.playable)) {
+    for (const card of g.listCards()) {
       const offer = g.createOfferForCard({ cardIndex: card.index, heroLevel: 30, round: 0, seed: 0 })
       for (let seed = 0; seed < 300; seed++) {
         policy = 'refund'
@@ -270,6 +267,48 @@ describe('contract v2 (listCards / createOfferForCard / drawPolicy)', () => {
       }
     }
     throw new Error('引き分けの seed が見つからない')
+  })
+})
+
+describe('試合 38（あやしいかげ）', () => {
+  // 通常のマッチメイクで試合 38 を引く session seed を探す（Lv30 以上なら 1/38 で出る）
+  const shadowSession = () => {
+    for (let seed = 0; seed < 1000; seed++) {
+      const s = newSession({ seed })
+      if (currentOffer(game, s).cardIndex === 37) return s
+    }
+    throw new Error('試合 38 を引く seed が見つからない')
+  }
+
+  it('通常のマッチメイクで出て、オッズ・払い戻しが他の試合と同じ経路で決まる', () => {
+    const s = shadowSession()
+    const offer = currentOffer(game, s)
+    expect(offer.contestants.map((c) => c.name)).toEqual(['あやしいかげ', 'あやしいかげ', 'あやしいかげ'])
+    for (const c of offer.contestants) expect(game.oddsValue(offer, c.slot)).toBeGreaterThan(0)
+    const { session, entry } = playBet(game, s, 1)
+    expect(session.gold).toBe(entry.goldAfter)
+    if (entry.won) expect(entry.payout).toBe(Math.floor(offer.stake * game.oddsValue(offer, 1)))
+    const r = toStatRecord(entry)
+    expect(r.slots).toEqual([0, 1, 2])
+    expect(r.betSlot).toBe(1)
+  })
+
+  it('ログを捨てても battleSeed から同じ戦闘（正体を含む）を再生成できる', () => {
+    const { entry } = playBet(game, shadowSession(), 0)
+    const { battle, ...stripped } = entry
+    const re = battleFor(game, stripped)
+    expect(re.regenerated).toBe(true)
+    expect(re.result.battle).toEqual(battle)
+    expect(groupByTurn(re.result.battle.log).length).toBeGreaterThan(0)
+  })
+
+  it('Analysis を回せる', async () => {
+    const offer = game.createOfferForCard({ cardIndex: 37, heroLevel: 40, round: 0, seed: 1 })
+    const { dist } = await runAnalysis({ game, offer, trialsPerBet: 30, seed: 1, schedule: (fn) => fn() })
+    for (const slot of dist.slots) {
+      const row = dist.rows[slot]
+      expect(Object.values(row.wins).reduce((a, b) => a + b, 0) + row.draws + row.noWinners).toBe(30)
+    }
   })
 })
 

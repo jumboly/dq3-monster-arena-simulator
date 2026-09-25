@@ -18,29 +18,13 @@ const LEVEL_BANDS: ReadonlyArray<{ maxLevel: number; limit: number }> = [
   { maxLevel: 99, limit: 0x26 },
 ]
 
-/** 試合 38（あやしいかげ ×3）の添字 */
-export const SHADOW_MATCH_INDEX = 37
-
 export function cardLimitForLevel(heroLevel: number): number {
   const band = LEVEL_BANDS.find((b) => heroLevel <= b.maxLevel)
   if (!band || heroLevel < 1) throw new RangeError(`主人公レベルは 1..99: ${heroLevel}`)
   return band.limit
 }
 
-export interface CardPick {
-  cardIndex: number
-  /** Phase B 未実装のため試合 38 を候補から外した（抽選分布が実機と異なる） */
-  excludedShadowMatch: boolean
-}
-
-/**
- * 候補内は一様に抽選する（重みの記述が資料にないため。Likely）。
- * includeShadowMatch=false のときは試合 38 を候補から除く。あやしいかげの実体化は
- * Phase B で扱うため、Phase A では遊べる試合だけから選ぶ（Approximation）。
- */
-export function pickCard(heroLevel: number, rng: RandomSource, includeShadowMatch: boolean): CardPick {
-  const limit = cardLimitForLevel(heroLevel)
-  const excludedShadowMatch = !includeShadowMatch && limit > SHADOW_MATCH_INDEX
-  const candidates = excludedShadowMatch ? SHADOW_MATCH_INDEX : limit
-  return { cardIndex: rng.nextInt(candidates), excludedShadowMatch }
+/** 候補内は一様に抽選する（重みの記述が資料にないため。Likely）。戻り値は試合カードの添字 */
+export function pickCard(heroLevel: number, rng: RandomSource): number {
+  return rng.nextInt(cardLimitForLevel(heroLevel))
 }
