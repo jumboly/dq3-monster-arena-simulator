@@ -41,7 +41,7 @@ describe('Analysis の Worker 実行', () => {
     const main = await runAnalysis({ game, offer, trialsPerBet: 40, seed: 7, schedule: sync })
     const worker = new FakeWorker()
     let progressCalls = 0
-    const r = await analyze({ game, offer, trialsPerBet: 40, seed: 7, createWorker: () => worker, onProgress: () => progressCalls++ })
+    const r = await analyze({ offer, trialsPerBet: 40, seed: 7, createWorker: () => worker, onProgress: () => progressCalls++ })
     expect(r).toEqual({ dist: main.dist, aborted: false })
     expect(progressCalls).toBeGreaterThan(0)
     expect(worker.terminated).toBe(true)
@@ -51,7 +51,6 @@ describe('Analysis の Worker 実行', () => {
     const ac = new AbortController()
     const worker = new FakeWorker()
     const r = await analyze({
-      game,
       offer,
       trialsPerBet: 100000,
       seed: 1,
@@ -65,16 +64,10 @@ describe('Analysis の Worker 実行', () => {
     expect(Math.max(...trials) - Math.min(...trials)).toBeLessThanOrEqual(1)
   })
 
-  it('Worker を作れない環境ではメインスレッドで同じ表を作る', async () => {
-    const main = await runAnalysis({ game, offer, trialsPerBet: 20, seed: 3, schedule: sync })
-    const r = await analyze({ game, offer, trialsPerBet: 20, seed: 3, createWorker: () => null })
-    expect(r).toEqual(main)
-  })
-
   it('Worker の起動に失敗したらエラーにする', async () => {
     const worker = new FakeWorker()
     worker.postMessage = () => setTimeout(() => worker.onerror?.({ message: 'boom' } as ErrorEvent))
-    await expect(analyze({ game, offer, trialsPerBet: 10, seed: 1, createWorker: () => worker })).rejects.toThrow('boom')
+    await expect(analyze({ offer, trialsPerBet: 10, seed: 1, createWorker: () => worker })).rejects.toThrow('boom')
     expect(worker.terminated).toBe(true)
   })
 })

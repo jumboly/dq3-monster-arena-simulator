@@ -45,7 +45,6 @@ export function AnalysisPage() {
     setResult(null)
     try {
       const { dist, aborted } = await analyze({
-        game,
         offer,
         trialsPerBet: trials,
         seed,

@@ -1,11 +1,9 @@
 /**
- * Analysis の実行口。Web Worker が使えればそちらで回し、使えなければメインスレッドの分割実行に切り替える。
- * どちらでも runAnalysis と同じ Promise の形で返すので、画面側は実行場所を意識しない。
+ * Analysis の実行口。計算は常に Web Worker で回す（アプリが動くブラウザなら Worker は必ず使えるので、
+ * メインスレッドへの切り替えは持たない）。runAnalysis と同じ Promise の形で返す。
  */
-import type { ArenaGame } from '../../core/arena/ArenaGame'
 import type { MatchOffer } from '../../core/arena/types'
 import { createWinDistribution, type WinDistribution } from '../../core/stats/winDistribution'
-import { runAnalysis } from './analysisRunner'
 import type { AnalysisRequest, AnalysisResponse } from './analysisWorkerProtocol'
 
 /** Worker の差し替え口。テストで Worker を使わずにメッセージ経路を確かめるため */
@@ -17,30 +15,22 @@ export interface AnalysisWorkerLike {
 }
 
 export interface AnalyzeOptions {
-  /** Worker を使えないときのメインスレッド実行用 */
-  game: ArenaGame
   offer: MatchOffer
   trialsPerBet: number
   seed: number
   signal?: AbortSignal
   onProgress?: (done: number, total: number, dist: WinDistribution) => void
-  createWorker?: () => AnalysisWorkerLike | null
+  createWorker?: () => AnalysisWorkerLike
 }
 
-function defaultCreateWorker(): AnalysisWorkerLike | null {
-  if (typeof Worker === 'undefined') return null
-  try {
-    return new Worker(new URL('./analysis.worker.ts', import.meta.url), { type: 'module' }) as AnalysisWorkerLike
-  } catch {
-    return null
-  }
+function defaultCreateWorker(): AnalysisWorkerLike {
+  return new Worker(new URL('./analysis.worker.ts', import.meta.url), { type: 'module' }) as AnalysisWorkerLike
 }
 
 let nextId = 1
 
 export function analyze(o: AnalyzeOptions): Promise<{ dist: WinDistribution; aborted: boolean }> {
   const worker = (o.createWorker ?? defaultCreateWorker)()
-  if (!worker) return runAnalysis(o)
   const id = nextId++
   return new Promise((resolve, reject) => {
     const finish = () => {
