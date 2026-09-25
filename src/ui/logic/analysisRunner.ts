@@ -33,16 +33,15 @@ export function runAnalysis(o: AnalysisOptions): Promise<{ dist: WinDistribution
   const total = slots.length * o.trialsPerBet
   const budget = o.budgetMs ?? 12
   const schedule = o.schedule ?? ((fn) => setTimeout(fn, 0))
-  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now())
   let done = 0
 
   return new Promise((resolve, reject) => {
     const step = () => {
       try {
         if (o.signal?.aborted) return resolve({ dist, aborted: true })
-        const start = now()
+        const start = performance.now()
         // 賭け先ごとに試行を交互に回す。途中で止めても各行の試行数が揃うようにするため
-        while (done < total && now() - start < budget) {
+        while (done < total && performance.now() - start < budget) {
           const betSlot = slots[done % slots.length]
           const battleSeed = rng.nextInt(0x7fffffff)
           recordRound(dist, o.game.resolveBet({ offer: o.offer, betSlot, goldBefore: 0, battleSeed }))
