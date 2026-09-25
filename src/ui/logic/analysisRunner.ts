@@ -1,9 +1,9 @@
 /**
  * Analysis（Simulate × N）の分割実行。
  *
- * Web Worker ではなく setTimeout 分割を選んだ理由: 本実装の ArenaGame がデータ JSON を
- * どう読み込むか未確定で、Worker 側で同じ初期化を保証する仕組みを今は持てないため。
- * 1 チャンクを時間予算（既定 12ms）で区切るので、1 試合が重くなってもフレーム落ちは限定的。
+ * 画面からは analysisClient 経由で Web Worker 内で呼ばれる。テストではメインスレッドで直接呼び、
+ * Worker 経由の結果と一致することを確かめる（同じ関数なので同じ seed なら同じ表になる）。
+ * 時間予算で区切って次のチャンクを setTimeout に回すのは、チャンクの合間に中止メッセージを受け取るため。
  * 集計は core/stats の純関数に任せ、ここはスケジューリングだけを持つ。
  *
  * 所持金には影響させない: goldBefore はダミー値を渡し、ArenaStore は一切触らない。
@@ -33,16 +33,15 @@ export function runAnalysis(o: AnalysisOptions): Promise<{ dist: WinDistribution
   const total = slots.length * o.trialsPerBet
   const budget = o.budgetMs ?? 12
   const schedule = o.schedule ?? ((fn) => setTimeout(fn, 0))
-  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now())
   let done = 0
 
   return new Promise((resolve, reject) => {
     const step = () => {
       try {
         if (o.signal?.aborted) return resolve({ dist, aborted: true })
-        const start = now()
+        const start = performance.now()
         // 賭け先ごとに試行を交互に回す。途中で止めても各行の試行数が揃うようにするため
-        while (done < total && now() - start < budget) {
+        while (done < total && performance.now() - start < budget) {
           const betSlot = slots[done % slots.length]
           const battleSeed = rng.nextInt(0x7fffffff)
           recordRound(dist, o.game.resolveBet({ offer: o.offer, betSlot, goldBefore: 0, battleSeed }))

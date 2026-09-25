@@ -54,10 +54,8 @@ export function defaultStorage(): KeyValueStorage | null {
 }
 
 function isQuotaError(e: unknown): boolean {
-  if (!(e instanceof Error) && !(typeof DOMException !== 'undefined' && e instanceof DOMException)) return false
-  const err = e as { name?: string; code?: number }
-  // ブラウザごとに名前が違うため複数を見る（Firefox は NS_ERROR_DOM_QUOTA_REACHED）
-  return err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED' || err.code === 22
+  // DOMException は Error を継承しているので instanceof Error で拾える。名前は主要ブラウザで標準名にそろっている
+  return e instanceof Error && e.name === 'QuotaExceededError'
 }
 
 export function createVersionedStore<T>(opts: VersionedStoreOptions<T>): VersionedStore<T> {
